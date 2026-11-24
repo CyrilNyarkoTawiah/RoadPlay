@@ -77,7 +77,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private lateinit var seekBar: SeekBar
     private lateinit var posLabel: TextView
     private lateinit var controlsBar: LinearLayout
-    private lateinit var webViewPane: FrameLayout
+    private lateinit var topBar: FrameLayout
+    private lateinit var webViewPane: LinearLayout
     private lateinit var webView: WebView
     private lateinit var urlBar: EditText
 
@@ -234,12 +235,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setBackgroundColor(Color.BLACK)
             setOnTouchListener { v, ev -> scheduleHide(); v.performClick(); false }
         }
-        webViewPane = FrameLayout(this).apply {
+        webViewPane = LinearLayout(this).apply {
             setBackgroundColor(Color.BLACK)
             visibility = View.GONE
             orientation = LinearLayout.VERTICAL
-            addView(urlPane, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
-            addView(webView, FrameLayout.LayoutParams(-1, -1))
+            addView(urlPane, LinearLayout.LayoutParams(-1, -2))
+            addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
         }
 
         val root = FrameLayout(this).apply {
@@ -281,9 +282,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     // ---- Settings -------------------------------------------------------------------------
 
     private fun loadSettings() {
-        (application as RoadPlayApp).appScope.launch {
+        RoadPlayApp.instance.container.appScope.launch {
             try {
-                val s = (application as RoadPlayApp).container.settings.settings.first()
+                val s = RoadPlayApp.instance.container.settings.settings.first()
                 hideSeconds = s.carControlsHideSeconds.coerceIn(1, 10)
                 browserHome = s.browserHomeUrl
             } catch (_: Throwable) { /* defaults are fine */ }
@@ -475,7 +476,6 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
     }
     private lateinit var controlsBar: LinearLayout
-    private lateinit var topBar: FrameLayout
 
     private fun showControls() {
         controlsVisible = true

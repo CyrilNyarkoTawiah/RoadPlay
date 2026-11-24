@@ -35,8 +35,15 @@ class RoadPlayApp : Application(), ImageLoaderFactory {
     lateinit var container: AppContainer
         private set
 
+    companion object {
+        /** Static handle for non-Activity contexts (the AA car activity runs host-side). */
+        @Volatile lateinit var instance: RoadPlayApp
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         container = AppContainer(this)
     }
 
