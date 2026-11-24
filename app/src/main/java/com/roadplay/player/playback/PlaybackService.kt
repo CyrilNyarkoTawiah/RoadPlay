@@ -5,6 +5,8 @@ package com.roadplay.player.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.view.Surface
+import androidx.core.os.BundleCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -40,6 +42,13 @@ object RoadPlayCommands {
     const val ARG_MINUTES = "minutes"
     const val ARG_END_OF_ITEM = "end_of_item"
     val sleepTimer = SessionCommand(SLEEP_ACTION, Bundle.EMPTY)
+
+    /** Car-screen video surface handoff (see auto/CarPlayerActivity). */
+    const val SET_CAR_SURFACE = "com.roadplay.player.SET_CAR_SURFACE"
+    const val CLEAR_CAR_SURFACE = "com.roadplay.player.CLEAR_CAR_SURFACE"
+    const val ARG_SURFACE = "surface"
+    val setCarSurface = SessionCommand(SET_CAR_SURFACE, Bundle.EMPTY)
+    val clearCarSurface = SessionCommand(CLEAR_CAR_SURFACE, Bundle.EMPTY)
 }
 
 /**
@@ -216,6 +225,8 @@ class PlaybackService : MediaLibraryService() {
         ): MediaSession.ConnectionResult {
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 .add(RoadPlayCommands.sleepTimer)
+                .add(RoadPlayCommands.setCarSurface)
+                .add(RoadPlayCommands.clearCarSurface)
                 .build()
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(commands)
@@ -233,6 +244,20 @@ class PlaybackService : MediaLibraryService() {
                     args.getInt(RoadPlayCommands.ARG_MINUTES, 0),
                     args.getBoolean(RoadPlayCommands.ARG_END_OF_ITEM, false),
                 )
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            if (customCommand.customAction == RoadPlayCommands.SET_CAR_SURFACE) {
+                // The car screen's SurfaceView becomes the video output while parked.
+                val surface = BundleCompat.getParcelable(args, RoadPlayCommands.ARG_SURFACE, Surface::class.java)
+                if (surface != null) {
+                    applyVideoPolicy(audioOnly = false)
+                    exo.setVideoSurface(surface)
+                }
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            if (customCommand.customAction == RoadPlayCommands.CLEAR_CAR_SURFACE) {
+                // Car screen left; render nowhere until a UI re-attaches a surface.
+                exo.setVideoSurface(null)
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))

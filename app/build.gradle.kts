@@ -20,8 +20,8 @@ android {
         applicationId = "com.roadplay.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -59,6 +59,10 @@ android {
 }
 
 dependencies {
+    // The (old, partner-only) Android Auto SDK that lets a media app show its own
+    // Activity — and video — on the head unit while the car is parked.
+    implementation(files("libs/aauto.aar"))
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
