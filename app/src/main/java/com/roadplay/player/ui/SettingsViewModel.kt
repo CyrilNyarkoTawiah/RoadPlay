@@ -33,6 +33,9 @@ class SettingsViewModel(
     fun setAutoSubtitles(b: Boolean) { viewModelScope.launch { repo.setAutoSubtitles(b) } }
     fun setSubtitleScale(s: Float) { viewModelScope.launch { repo.setSubtitleScale(s) } }
     fun setSort(f: SortField, asc: Boolean) { viewModelScope.launch { repo.setSort(f, asc) } }
+    fun setCarControlsHideSeconds(s: Int) { viewModelScope.launch { repo.setCarControlsHideSeconds(s) } }
+    fun setVideoWhileDriving(b: Boolean) { viewModelScope.launch { repo.setVideoWhileDriving(b) } }
+    fun setBrowserHomeUrl(url: String) { viewModelScope.launch { repo.setBrowserHomeUrl(url) } }
 
     fun clearHistory(onDone: () -> Unit) { viewModelScope.launch { library.clearHistory(); onDone() } }
 

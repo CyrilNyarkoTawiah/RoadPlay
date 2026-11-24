@@ -78,6 +78,31 @@ fun SettingsScreen(
         Text("Text size: ${(s.subtitleScale * 100).toInt()}%", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
         Slider(value = s.subtitleScale, onValueChange = vm::setSubtitleScale, valueRange = 0.75f..1.75f, modifier = Modifier.padding(horizontal = 16.dp))
 
+        SectionHeader("Android Auto (car screen)")
+        Text("Hide video controls after", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
+        ChipRow {
+            listOf(1, 2, 3, 5).forEach { secs ->
+                FilterChip(selected = s.carControlsHideSeconds == secs, onClick = { vm.setCarControlsHideSeconds(secs) },
+                    label = { Text("${secs}s") })
+            }
+        }
+        ListItem(
+            headlineContent = { Text("Keep video while driving") },
+            supportingContent = { Text("Fermata-style: don't stop playback when the car starts moving. Drive safely — watch only when parked.") },
+            trailingContent = { Switch(checked = s.videoWhileDriving, onCheckedChange = vm::setVideoWhileDriving) },
+        )
+        Text("Browser home page", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
+        ChipRow {
+            listOf(
+                "https://m.youtube.com" to "YouTube",
+                "https://www.google.com" to "Google",
+                "about:blank" to "Blank",
+            ).forEach { (url, label) ->
+                FilterChip(selected = s.browserHomeUrl == url, onClick = { vm.setBrowserHomeUrl(url) },
+                    label = { Text(label) })
+            }
+        }
+
         SectionHeader("Library")
         Text("Default sorting", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
         ChipRow {

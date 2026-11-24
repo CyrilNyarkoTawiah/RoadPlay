@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,9 @@ class SettingsRepository(private val context: Context) {
         val SUB_SCALE = floatPreferencesKey("subtitle_scale")
         val SORT_FIELD = stringPreferencesKey("sort_field")
         val SORT_ASC = booleanPreferencesKey("sort_ascending")
+        val CAR_HIDE_SECONDS = intPreferencesKey("car_controls_hide_seconds")
+        val CAR_DRIVE_VIDEO = booleanPreferencesKey("car_video_while_driving")
+        val BROWSER_HOME = stringPreferencesKey("browser_home_url")
     }
 
     val settings: Flow<AppSettings> = context.settingsStore.data
@@ -40,6 +44,9 @@ class SettingsRepository(private val context: Context) {
             subtitleScale = this[Keys.SUB_SCALE] ?: d.subtitleScale,
             sortField = this[Keys.SORT_FIELD]?.let { runCatching { SortField.valueOf(it) }.getOrNull() } ?: d.sortField,
             sortAscending = this[Keys.SORT_ASC] ?: d.sortAscending,
+            carControlsHideSeconds = this[Keys.CAR_HIDE_SECONDS] ?: d.carControlsHideSeconds,
+            videoWhileDriving = this[Keys.CAR_DRIVE_VIDEO] ?: d.videoWhileDriving,
+            browserHomeUrl = this[Keys.BROWSER_HOME] ?: d.browserHomeUrl,
         )
     }
 
@@ -48,6 +55,15 @@ class SettingsRepository(private val context: Context) {
     suspend fun setResume(enabled: Boolean) { context.settingsStore.edit { it[Keys.RESUME] = enabled } }
     suspend fun setAutoSubtitles(enabled: Boolean) { context.settingsStore.edit { it[Keys.AUTO_SUBS] = enabled } }
     suspend fun setSubtitleScale(scale: Float) { context.settingsStore.edit { it[Keys.SUB_SCALE] = scale } }
+    suspend fun setCarControlsHideSeconds(seconds: Int) {
+        context.settingsStore.edit { it[Keys.CAR_HIDE_SECONDS] = seconds.coerceIn(1, 10) }
+    }
+    suspend fun setVideoWhileDriving(enabled: Boolean) {
+        context.settingsStore.edit { it[Keys.CAR_DRIVE_VIDEO] = enabled }
+    }
+    suspend fun setBrowserHomeUrl(url: String) {
+        context.settingsStore.edit { it[Keys.BROWSER_HOME] = url.trim() }
+    }
     suspend fun setSort(field: SortField, ascending: Boolean) {
         context.settingsStore.edit { it[Keys.SORT_FIELD] = field.name; it[Keys.SORT_ASC] = ascending }
     }

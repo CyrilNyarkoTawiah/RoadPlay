@@ -14,4 +14,8 @@ data class AppSettings(
     val subtitleScale: Float = 1f,
     val sortField: SortField = SortField.DATE_ADDED,
     val sortAscending: Boolean = false,
+    // Android Auto car screen
+    val carControlsHideSeconds: Int = 2,
+    val videoWhileDriving: Boolean = true,
+    val browserHomeUrl: String = "https://m.youtube.com",
 )
