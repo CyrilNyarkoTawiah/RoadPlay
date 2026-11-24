@@ -204,8 +204,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private inner class SurfaceLifecycle : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            val s = holder.surface ?: return
-            surface = Surface(s)
+            surface = holder.surface ?: return
             controller?.let { sendCarSurface(it) }
         }
 
