@@ -3,6 +3,7 @@ name: Android CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -30,6 +31,18 @@ jobs:
           fi
           chmod +x ./gradlew
 
+      - name: Restore release keystore
+        env:
+          ROADPLAY_KEYSTORE: ${{ secrets.ROADPLAY_KEYSTORE }}
+        run: |
+          if [ -n "$ROADPLAY_KEYSTORE" ]; then
+            echo "$ROADPLAY_KEYSTORE" | base64 -d > "$RUNNER_TEMP/roadplay.jks"
+            echo "ROADPLAY_KEYSTORE_PATH=$RUNNER_TEMP/roadplay.jks" >> "$GITHUB_ENV"
+            echo "Keystore restored."
+          else
+            echo "No keystore secret set — release build will be skipped."
+          fi
+
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
@@ -42,6 +55,38 @@ jobs:
           name: roadplay-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Build signed release APK
+        if: env.ROADPLAY_KEYSTORE_PATH != ''
+        env:
+          ROADPLAY_KEYSTORE_PASSWORD: ${{ secrets.ROADPLAY_KEYSTORE_PASSWORD }}
+          ROADPLAY_KEY_ALIAS: ${{ secrets.ROADPLAY_KEY_ALIAS }}
+          ROADPLAY_KEY_PASSWORD: ${{ secrets.ROADPLAY_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Upload signed release APK
+        if: env.ROADPLAY_KEYSTORE_PATH != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: roadplay-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v') && env.ROADPLAY_KEYSTORE_PATH != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          name: RoadPlay ${{ github.ref_name }}
+          body: |
+            Signed release APK (app-release.apk). Install over any previous
+            RoadPlay release build — signed with the same key, so updates work.
+
+            This is the **release** application id `com.roadplay.player`; it
+            installs separately from the old debug build
+            (`com.roadplay.player.debug`).
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload test reports on failure
         if: failure()
