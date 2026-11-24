@@ -17,7 +17,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.session.MediaBrowser
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
@@ -41,7 +43,7 @@ import com.roadplay.player.playback.RoadPlayCommands
  */
 class CarPlayerActivity : CarActivity(), Player.Listener {
 
-    private var controller: MediaController? = null
+    private var controller: MediaBrowser? = null
     private var surface: Surface? = null
     private var surfaceSent = false
 
@@ -128,7 +130,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private fun connect() {
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
-        val future = MediaController.Builder(this, token).buildAsync()
+        val future = MediaBrowser.Builder(this, token).buildAsync()
         future.addListener({
             try {
                 controller = future.get().also { c ->
@@ -235,7 +237,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     override fun onEvents(player: Player, events: Player.Events) {
         if (events.isEmpty()) return
-        updateVideoOverlay(player as MediaController)
+        updateVideoOverlay(player as MediaBrowser)
     }
 
     // ---- Keys ------------------------------------------------------------------------------
