@@ -159,7 +159,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                         Row(
                             title = item.mediaMetadata.title?.toString() ?: "Untitled",
                             item = item,
-                            isFolder = item.mediaMetadata.isBrowsable,
+                            isFolder = item.mediaMetadata.isBrowsable == true,
                         ),
                     )
                 }
@@ -204,7 +204,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private inner class SurfaceLifecycle : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            surface = Surface(holder.surface)
+            val s = holder.surface ?: return
+            surface = Surface(s)
             controller?.let { sendCarSurface(it) }
         }
 
@@ -236,7 +237,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
-        if (events.isEmpty()) return
+        if (events.size() == 0) return
         updateVideoOverlay(player as MediaBrowser)
     }
 
