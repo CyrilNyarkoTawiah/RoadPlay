@@ -475,7 +475,6 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             topBar.visibility = View.GONE
         }
     }
-    private lateinit var controlsBar: LinearLayout
 
     private fun showControls() {
         controlsVisible = true
@@ -630,7 +629,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             icon.setImageResource(
                 when (r.kind) {
                     Row.Kind.BROWSER -> android.R.drawable.ic_menu_manage
-                    Row.Kind.YOUTUBE -> android.R.drawable.ic_menu_play_clip
+                    Row.Kind.YOUTUBE -> android.R.drawable.ic_menu_upload
                     Row.Kind.FOLDER, Row.Kind.BACK -> android.R.drawable.ic_menu_agenda
                     else -> android.R.drawable.ic_media_play
                 },
