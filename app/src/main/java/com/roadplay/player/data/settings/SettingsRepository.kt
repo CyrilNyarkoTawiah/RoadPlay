@@ -26,6 +26,7 @@ class SettingsRepository(private val context: Context) {
         val SORT_FIELD = stringPreferencesKey("sort_field")
         val SORT_ASC = booleanPreferencesKey("sort_ascending")
         val CAR_HIDE_SECONDS = intPreferencesKey("car_controls_hide_seconds")
+        val CAR_FONT_SCALE = floatPreferencesKey("car_font_scale")
         val CAR_DRIVE_VIDEO = booleanPreferencesKey("car_video_while_driving")
         val BROWSER_HOME = stringPreferencesKey("browser_home_url")
     }
@@ -45,6 +46,7 @@ class SettingsRepository(private val context: Context) {
             sortField = this[Keys.SORT_FIELD]?.let { runCatching { SortField.valueOf(it) }.getOrNull() } ?: d.sortField,
             sortAscending = this[Keys.SORT_ASC] ?: d.sortAscending,
             carControlsHideSeconds = this[Keys.CAR_HIDE_SECONDS] ?: d.carControlsHideSeconds,
+            carFontScale = this[Keys.CAR_FONT_SCALE] ?: d.carFontScale,
             videoWhileDriving = this[Keys.CAR_DRIVE_VIDEO] ?: d.videoWhileDriving,
             browserHomeUrl = this[Keys.BROWSER_HOME] ?: d.browserHomeUrl,
         )
@@ -57,6 +59,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun setSubtitleScale(scale: Float) { context.settingsStore.edit { it[Keys.SUB_SCALE] = scale } }
     suspend fun setCarControlsHideSeconds(seconds: Int) {
         context.settingsStore.edit { it[Keys.CAR_HIDE_SECONDS] = seconds.coerceIn(1, 10) }
+    }
+    suspend fun setCarFontScale(scale: Float) {
+        context.settingsStore.edit { it[Keys.CAR_FONT_SCALE] = scale.coerceIn(0.8f, 1.6f) }
     }
     suspend fun setVideoWhileDriving(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.CAR_DRIVE_VIDEO] = enabled }

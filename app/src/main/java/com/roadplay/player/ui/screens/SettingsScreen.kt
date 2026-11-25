@@ -79,6 +79,14 @@ fun SettingsScreen(
         Slider(value = s.subtitleScale, onValueChange = vm::setSubtitleScale, valueRange = 0.75f..1.75f, modifier = Modifier.padding(horizontal = 16.dp))
 
         SectionHeader("Android Auto (car screen)")
+        Text("Car screen text size", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
+        Text("Now: ${(s.carFontScale * 100).toInt()}%", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
+        Slider(
+            value = s.carFontScale,
+            onValueChange = vm::setCarFontScale,
+            valueRange = 0.8f..1.6f,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
         Text("Hide video controls after", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
         ChipRow {
             listOf(1, 2, 3, 5).forEach { secs ->

@@ -106,6 +106,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private var lastMiniThumbId: Long = -1
     private var retryFired = false
     private lateinit var keyboardPane: LinearLayout
+    private var keyboardToWebView = false
 
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
@@ -172,9 +173,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(
                 ImageView(this@CarPlayerActivity).apply { miniThumb = this }.apply {
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = ContextCompat.getDrawable(context, R.drawable.bg_row_card)
+                    background = ContextCompat.getDrawable(context, R.drawable.bg_card)
                     clipToOutline = true
-                    layoutParams = LinearLayout.LayoutParams(dp(74), dp(42)).apply { marginEnd = dp(10) }
+                    layoutParams = LinearLayout.LayoutParams(dp(64), dp(36)).apply { marginEnd = dp(10) }
                 },
             )
             addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
@@ -248,14 +249,18 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) },
             )
         }
-        fun navItem(label: String, id: String, iconRes: Int, selected: Boolean = false) {
+        fun navItem(label: String, id: String, iconRes: Int, bgRes: Int, selected: Boolean = false) {
             val item = LinearLayout(this@CarPlayerActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(12), dp(12), dp(12))
-                if (selected) background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
+                setPadding(dp(12), dp(14), dp(12), dp(14))
+                // Every category carries its own colour card (per the mockup image);
+                // selection adds a white stroke via the foreground layer.
+                background = ContextCompat.getDrawable(context, bgRes)
+                if (selected) foreground = ContextCompat.getDrawable(context, R.drawable.bg_nav_stroke)
                 isClickable = true
                 isFocusable = true
+                tag = bgRes
                 addView(
                     ImageView(this@CarPlayerActivity).apply {
                         setImageResource(iconRes)
@@ -265,21 +270,25 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 addView(
                     TextView(this@CarPlayerActivity).apply {
                         text = label
-                        setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
+                        setTextColor(Color.WHITE)
                         textSize = 15f
                     },
                 )
                 setOnClickListener { navTo(id, label) }
             }
-            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
+            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+                marginStart = dp(2)
+                marginEnd = dp(2)
+            })
             navButtons.add(label to item)
         }
-        navItem("Home", MediaIds.RECENT_ROOT, R.drawable.ic_home, selected = true)
-        navItem("All Videos", MediaIds.ALL, R.drawable.ic_movie)
-        navItem("Favourites", MediaIds.FAVOURITES, R.drawable.ic_star)
-        navItem("Playlists", MediaIds.PLAYLISTS, R.drawable.ic_playlist_play)
-        navItem("🌐 Browser", NAV_BROWSER, R.drawable.ic_public)
-        navItem("▶ YouTube", NAV_YOUTUBE, R.drawable.ic_smart_display)
+        navItem("Home", MediaIds.RECENT_ROOT, R.drawable.ic_home, R.drawable.bg_row_card, selected = true)
+        navItem("All Videos", MediaIds.ALL, R.drawable.ic_movie, R.drawable.bg_nav_videos)
+        navItem("Favourites", MediaIds.FAVOURITES, R.drawable.ic_star, R.drawable.bg_nav_fav)
+        navItem("Playlists", MediaIds.PLAYLISTS, R.drawable.ic_playlist_play, R.drawable.bg_nav_playlists)
+        navItem("🌐 Browser", NAV_BROWSER, R.drawable.ic_public, R.drawable.bg_nav_browser)
+        navItem("▶ YouTube", NAV_YOUTUBE, R.drawable.ic_smart_display, R.drawable.bg_nav_youtube)
 
         val contentPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -305,11 +314,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             )
             addView(listHost, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(emptyView, LinearLayout.LayoutParams(-1, 0, 1f))
-            // Mini player floats above the AA host's own media pill.
+            // Sits low on the head unit; leaves room for the AA host's media pill.
             addView(
                 miniBar,
                 LinearLayout.LayoutParams(-1, -2).apply {
-                    bottomMargin = dp(72)
+                    bottomMargin = dp(56)
                     marginStart = dp(12)
                     marginEnd = dp(12)
                 },
@@ -479,6 +488,16 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             settings.javaScriptCanOpenWindowsAutomatically = true
             android.webkit.CookieManager.getInstance().setAcceptCookie(true)
             android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            addJavascriptInterface(
+                object : Any() {
+                    @android.webkit.JavascriptInterface
+                    fun onFieldFocus() { main.post { keyboardToWebView = true } }
+
+                    @android.webkit.JavascriptInterface
+                    fun onFieldBlur() { main.post { keyboardToWebView = false } }
+                },
+                "rpkb",
+            )
             settings.userAgentString =
                 "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -499,6 +518,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 override fun onPageFinished(view: WebView, url: String) {
                     webStatus.visibility = View.GONE
                     urlBar.setText(url)
+                    // Track in-page text fields so the car keyboard types into THEM
+                    // (e.g. YouTube's own search box), not the URL bar.
+                    view.evaluateJavascript(
+                        "(function(){function r(e){var t=e.target;var tag=(t&&t.tagName||'').toUpperCase();if(tag==='INPUT'||tag==='TEXTAREA'||(t&&t.isContentEditable)){try{rpkb.onFieldFocus();}catch(x){}}else{try{rpkb.onFieldBlur();}catch(x){}}}document.addEventListener('focusin',r,true);document.addEventListener('focusout',r,true);})()",
+                        null,
+                    )
                 }
             }
             webChromeClient = object : WebChromeClient() {
@@ -609,11 +634,30 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 val s = RoadPlayApp.instance.container.settings.settings.first()
                 hideSeconds = s.carControlsHideSeconds.coerceIn(1, 10)
                 browserHome = s.browserHomeUrl
-                Log.i(TAG, "settings: hide=${hideSeconds}s home=$browserHome")
+                fontScale = s.carFontScale.coerceIn(0.8f, 1.6f)
+                applyTextScale()
+                Log.i(TAG, "settings: hide=${hideSeconds}s home=$browserHome font=$fontScale")
             } catch (t: Throwable) {
                 Log.e(TAG, "settings load failed", t)
             }
         }
+    }
+
+    /** Car screen font scale (set from the phone app). */
+    private var fontScale = 1.15f
+
+    private fun applyTextScale() {
+        titleView.textSize = 18f * fontScale
+        videoTitle.textSize = 15f * fontScale
+        miniTitle.textSize = 13f * fontScale
+        miniPos.textSize = 11f * fontScale
+        posLabel.textSize = 11f * fontScale
+        heroTitle.textSize = 18f * fontScale
+        emptyView.textSize = 15f * fontScale
+        for ((_, view) in navButtons) {
+            (view.getChildAt(1) as TextView).textSize = 15f * fontScale
+        }
+        adapter.notifyDataSetChanged()
     }
 
     // ---- Lifecycle ------------------------------------------------------------------------
@@ -765,12 +809,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             isClickable = true
             isFocusable = true
-            setOnClickListener {
-                val start = urlBar.selectionStart.coerceIn(0, urlBar.text.length)
-                urlBar.text.insert(start, label)
-                urlBar.setSelection(start + label.length)
-                scheduleHide()
-            }
+            setOnClickListener { insertKeyboardText(label) }
         }
         val pane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -796,14 +835,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             isClickable = true
             isFocusable = true
-            setOnClickListener {
-                val start = urlBar.selectionStart
-                if (start > 0 && urlBar.text.isNotEmpty()) {
-                    urlBar.text.delete(start - 1, start)
-                    urlBar.setSelection(start - 1)
-                }
-                scheduleHide()
-            }
+            setOnClickListener { backspaceKeyboard() }
         }
         val spaceKey = key("space", 150).apply { text = "" }
         val dotComKey = key(".com", 70)
@@ -818,7 +850,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             isClickable = true
             isFocusable = true
-            setOnClickListener { openUrl(urlBar.text.toString()); hideKeyboard() }
+            setOnClickListener { submitKeyboardGo() }
         }
         lastRow.addView(backKey)
         lastRow.addView(spaceKey)
@@ -830,8 +862,76 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     private fun toggleKeyboard() {
-        keyboardPane.visibility =
-            if (keyboardPane.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        val showing = keyboardPane.visibility == View.VISIBLE
+        keyboardPane.visibility = if (showing) View.GONE else View.VISIBLE
+        if (!showing) {
+            // Also offer the phone's own keyboard — AA hosts don't show the system
+            // IME on the car display automatically, so ask for it explicitly.
+            try {
+                val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                urlBar.requestFocus()
+                imm.showSoftInput(urlBar, 0)
+            } catch (t: Throwable) { /* IME unavailable on this display — the built-in keyboard covers it. */ }
+        }
+    }
+
+    /** Route keyboard input: in-page field (YouTube search etc.) or the URL bar. */
+    private fun insertKeyboardText(s: String) {
+        if (keyboardToWebView) {
+            val lit = org.json.JSONObject.quote(s)
+            webView.evaluateJavascript(
+                "(function(){var el=document.activeElement;if(!el||el.value===undefined)return;" +
+                    "var st=(typeof el.selectionStart==='number')?el.selectionStart:el.value.length;" +
+                    "var se=(typeof el.selectionEnd==='number')?el.selectionEnd:st;" +
+                    "el.value=el.value.slice(0,st)+$lit+el.value.slice(se);" +
+                    "try{el.selectionStart=el.selectionEnd=st+1;}catch(e){}" +
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));el.focus();})()",
+                null,
+            )
+        } else {
+            val start = urlBar.selectionStart.coerceIn(0, urlBar.text.length)
+            urlBar.text.insert(start, s)
+            urlBar.setSelection(start + s.length)
+        }
+        scheduleHide()
+    }
+
+    private fun backspaceKeyboard() {
+        if (keyboardToWebView) {
+            webView.evaluateJavascript(
+                "(function(){var el=document.activeElement;if(!el||el.value===undefined)return;" +
+                    "var st=(typeof el.selectionStart==='number')?el.selectionStart:el.value.length;" +
+                    "var se=(typeof el.selectionEnd==='number')?el.selectionEnd:st;" +
+                    "if(st>0&&st===se){st--;}" +
+                    "el.value=el.value.slice(0,st)+el.value.slice(se);" +
+                    "try{el.selectionStart=el.selectionEnd=st;}catch(e){}" +
+                    "el.dispatchEvent(new Event('input',{bubbles:true}));el.focus();})()",
+                null,
+            )
+        } else {
+            val start = urlBar.selectionStart
+            if (start > 0 && urlBar.text.isNotEmpty()) {
+                urlBar.text.delete(start - 1, start)
+                urlBar.setSelection(start - 1)
+            }
+        }
+        scheduleHide()
+    }
+
+    private fun submitKeyboardGo() {
+        if (keyboardToWebView) {
+            webView.evaluateJavascript(
+                "(function(){var el=document.activeElement;var q=(el&&el.value)?el.value:'';" +
+                    "var isYT=location.host.indexOf('youtube')>=0;" +
+                    "if(isYT&&q){window.location='/results?search_query='+encodeURIComponent(q);}" +
+                    "else if(el&&el.form){try{el.form.submit();}catch(e){}}})()",
+                null,
+            )
+            hideKeyboard()
+        } else {
+            openUrl(urlBar.text.toString())
+            hideKeyboard()
+        }
     }
 
     private fun hideKeyboard() {
@@ -944,11 +1044,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         if (navButtons.none { it.first == label }) return
         for ((name, view) in navButtons) {
             val selected = name == label
-            view.background =
-                if (selected) ContextCompat.getDrawable(this, R.drawable.bg_nav_selected) else null
-            (view.getChildAt(1) as TextView).setTextColor(
-                if (selected) Color.WHITE else Color.parseColor("#C7CDD8"),
-            )
+            // Colour card stays; selection shows as a white stroke overlay.
+            view.background = ContextCompat.getDrawable(this, view.tag as Int)
+            view.foreground =
+                if (selected) ContextCompat.getDrawable(this, R.drawable.bg_nav_stroke) else null
         }
     }
 
@@ -1135,9 +1234,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private fun makeRow(): LinearLayout {
         val thumb = ImageView(this).apply {
-            val lp = LinearLayout.LayoutParams(dp(112), dp(63))
+            val lp = LinearLayout.LayoutParams(dp(72), dp(40))
             lp.gravity = Gravity.CENTER_VERTICAL
-            lp.marginEnd = dp(12)
+            lp.marginEnd = dp(10)
             layoutParams = lp
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = ContextCompat.getDrawable(context, R.drawable.bg_card)
@@ -1167,10 +1266,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_row_card))
             }
             layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
-                setMargins(dp(0), 0, dp(0), dp(8))
+                setMargins(dp(0), 0, dp(0), dp(6))
             }
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            minimumHeight = dp(80)
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            minimumHeight = dp(58)
             isClickable = true
             isFocusable = true
             addView(thumb)
@@ -1191,6 +1290,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
         fun bind(r: Row) {
             bound = r
+            label.textSize = 15f * fontScale
             label.text = r.title
             val videoId = r.item?.mediaId?.let { MediaIds.parseVideo(it) }
             if (videoId != null) {
