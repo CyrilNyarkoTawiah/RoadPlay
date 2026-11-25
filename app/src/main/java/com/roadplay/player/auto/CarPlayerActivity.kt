@@ -32,6 +32,7 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.session.MediaBrowser
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
@@ -88,6 +89,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private lateinit var webView: WebView
     private lateinit var urlBar: EditText
     private lateinit var webStatus: TextView
+    private lateinit var miniBar: LinearLayout
+    private lateinit var miniTitle: TextView
+    private lateinit var miniPos: TextView
+
+    /** False = browse the library (mini player); true = fullscreen video overlay. */
+    private var videoExpanded = false
 
     /** Back stack of (title, parentId); last = currently shown. */
     private val trail = ArrayDeque<Pair<String, String>>()
@@ -125,6 +132,38 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             layoutManager = LinearLayoutManager(this@CarPlayerActivity)
             setHasFixedSize(true)
         }
+        miniTitle = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setSingleLine(true)
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        miniPos = TextView(this).apply {
+            setTextColor(Color.LTGRAY)
+            textSize = 11f
+            setPadding(dp(6), 0, 0, 0)
+        }
+        miniBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.argb(230, 14, 16, 24))
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            gravity = Gravity.CENTER_VERTICAL
+            addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(miniPos)
+            addView(controlButton("⏯") { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
+            addView(
+                controlButton("↗") { _ ->
+                    controller?.let { m ->
+                        if (MediaIds.parseVideo(m.currentMediaItem?.mediaId ?: "") != null) {
+                            videoExpanded = true
+                            updateVideoOverlay(m)
+                        }
+                    }
+                },
+            )
+            addView(controlButton("✕") { controller?.stop() })
+        }
         val listPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             // Slightly tinted (not pure black): if the unit shows exactly this shade,
@@ -133,6 +172,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(titleView)
             addView(listHost, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(emptyView, LinearLayout.LayoutParams(-1, 0, 1f))
+            // Mini player floats above the AA host's own media pill.
+            addView(miniBar, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(72) })
         }
 
         // ---- video layer ----------------------------------------------------------------
@@ -150,7 +191,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setPadding(0, dp(6), 0, dp(6))
             addView(videoTitle, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
             addView(
-                controlButton("✕") { onBackPressed() },
+                controlButton("‹") { collapseVideo() },
+                FrameLayout.LayoutParams(-2, -2, Gravity.START or Gravity.CENTER_VERTICAL).apply {
+                    marginStart = dp(10)
+                },
+            )
+            addView(
+                controlButton("✕") { collapseVideo() },
                 FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL).apply {
                     marginEnd = dp(10)
                 },
@@ -212,7 +259,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             visibility = View.GONE
             // tap anywhere = show controls; second tap while visible = also refresh timer
             setOnClickListener { showControls() }
-            addView(videoSurfaceView, FrameLayout.LayoutParams(-1, -1))
+            addView(videoSurfaceView, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
             addView(topBar, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
             addView(bottomControls, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         }
@@ -348,6 +395,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     override fun onStart() {
         super.onStart()
         Log.i(TAG, "onStart")
+        // Library-first: every entry opens at the root, even if a movie auto-resumes.
+        videoExpanded = false
+        trail.clear()
+        trail.addLast(rootTitle() to MediaIds.ROOT)
         loadSettings()
         connect()
     }
@@ -384,6 +435,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 c.addListener(this)
                 show(trail.last().second, trail.last().first)
                 updateVideoOverlay(c)
+                main.post(positionRun)
             } catch (t: Throwable) {
                 Log.e(TAG, "connect: FAILED", t)
                 showEmpty("Player connect failed: ${t.message}")
@@ -460,6 +512,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             else -> controller?.let { c ->
                 row.item?.let {
+                    videoExpanded = true
                     c.setMediaItem(it)
                     c.prepare()
                     c.play()
@@ -523,26 +576,36 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private fun updateVideoOverlay(c: MediaBrowser) {
         val video = c.videoSize.width > 0
         val mime = c.currentMediaItem?.localConfiguration?.mimeType
-        // Detect our library videos by mediaId scheme — mimeType is null until the
-        // item is re-resolved, so it cannot be the only signal.
+        // Detect our library videos by mediaId scheme — mimeType may be null until
+        // the item is re-resolved, so it cannot be the only signal.
         val ourVideo = c.currentMediaItem?.mediaId?.let { MediaIds.parseVideo(it) != null } == true
         val videoItem = video || mime?.startsWith("video") == true || ourVideo
-        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=$video mime=$mime ourVideo=$ourVideo")
+        Log.i(
+            TAG,
+            "updateVideoOverlay: playing=${c.isPlaying} video=$video mime=$mime ourVideo=$ourVideo expanded=$videoExpanded",
+        )
         val wasVisible = videoOverlay.visibility == View.VISIBLE
-        videoOverlay.visibility = if (videoItem) View.VISIBLE else View.GONE
-        if (videoItem) {
+        val expanded = videoExpanded && videoItem
+        videoOverlay.visibility = if (expanded) View.VISIBLE else View.GONE
+        // Library-first: while browsing, a playing video lives in the mini bar.
+        miniBar.visibility = if (videoItem && !expanded) View.VISIBLE else View.GONE
+        miniTitle.text = c.currentMediaItem?.mediaMetadata?.title ?: ""
+        if (expanded) {
             // Attach the car surface FIRST — ExoPlayer only decodes/reports video
             // once it has an output surface. Waiting for videoSize deadlocks.
             surface?.let { if (!surfaceSent) sendCarSurface(c) }
             if (!wasVisible) showControls()
         } else {
             if (surfaceSent) clearCarSurface(c)
-            if (c.isPlaying) {
-                emptyView.text = "Playing audio only — no video stream on this screen"
-                emptyView.visibility = View.VISIBLE
-                listHost.visibility = View.VISIBLE
-            }
         }
+    }
+
+    /** Collapse the fullscreen video back to the library; playback keeps running. */
+    private fun collapseVideo() {
+        Log.i(TAG, "collapseVideo → library (playback continues)")
+        videoExpanded = false
+        main.removeCallbacks(hideRun)
+        controller?.let { updateVideoOverlay(it) }
     }
 
     private fun sendCarSurface(c: MediaBrowser) {
@@ -591,10 +654,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private val positionRun = object : Runnable {
         override fun run() {
             val c = controller ?: return
+            val dur = c.duration.coerceAtLeast(0)
             if (controlsVisible && videoOverlay.visibility == View.VISIBLE) {
-                val dur = c.duration.coerceAtLeast(0)
                 if (dur > 0) seekBar.progress = ((c.currentPosition * 100) / dur).toInt()
                 posLabel.text = "${fmt(c.currentPosition)} / ${fmt(dur)}"
+            }
+            if (miniBar.visibility == View.VISIBLE) {
+                miniPos.text = "${fmt(c.currentPosition)} / ${fmt(dur)}"
             }
             main.postDelayed(this, 500)
         }
@@ -616,6 +682,30 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
             videoTitle.text = player.currentMediaItem?.mediaMetadata?.title ?: ""
         }
+    }
+
+    override fun onVideoSizeChanged(videoSize: VideoSize) {
+        main.post { fitSurface(videoSize) }
+    }
+
+    /** Keep the movie's aspect ratio on the ultrawide head unit — no stretch, no crop. */
+    private fun fitSurface(vs: VideoSize) {
+        if (vs.width == 0 || vs.height == 0) return
+        val w = videoOverlay.width
+        val h = videoOverlay.height
+        if (w == 0 || h == 0) {
+            main.postDelayed({ fitSurface(vs) }, 100)
+            return
+        }
+        val scale = minOf(w.toFloat() / vs.width, h.toFloat() / vs.height)
+        videoSurfaceView.layoutParams = videoSurfaceView.layoutParams.apply {
+            width = (vs.width * scale).toInt().coerceAtLeast(1)
+            height = (vs.height * scale).toInt().coerceAtLeast(1)
+        }
+        Log.i(
+            TAG,
+            "fitSurface ${vs.width}x${vs.height} -> ${videoSurfaceView.layoutParams.width}x${videoSurfaceView.layoutParams.height}",
+        )
     }
 
     // ---- Keys ------------------------------------------------------------------------------
@@ -643,13 +733,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     override fun onBackPressed() {
         when {
-            videoOverlay.visibility == View.VISIBLE -> {
-                // hide controls first, then leave the video
-                if (controlsVisible) showControls() else {
-                    videoOverlay.visibility = View.GONE
-                    clearCarSurface(controller ?: return)
-                }
-            }
+            videoOverlay.visibility == View.VISIBLE -> collapseVideo()
             webViewPane.visibility == View.VISIBLE -> {
                 if (webView.canGoBack()) webView.goBack() else closeBrowser()
             }
