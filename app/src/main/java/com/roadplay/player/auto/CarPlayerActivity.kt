@@ -126,24 +126,26 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         // ---- browse layer ---------------------------------------------------------------
         titleView = TextView(this).apply {
             setTextColor(Color.WHITE)
-            textSize = 20f
+            textSize = 18f
             text = try {
                 "RoadPlay v" + packageManager.getPackageInfo(packageName, 0).versionName
             } catch (_: Throwable) { "RoadPlay" }
-            setPadding(dp(20), dp(16), dp(20), dp(8))
+            setPadding(dp(6), dp(2), dp(6), dp(2))
             setSingleLine(true)
         }
         emptyView = TextView(this).apply {
-            setTextColor(Color.GRAY)
+            setTextColor(Color.parseColor("#9AA5B1"))
             textSize = 15f
             gravity = Gravity.CENTER
             text = "Starting…"
-            setPadding(dp(20), dp(40), dp(20), 0)
+            setPadding(dp(24), dp(48), dp(24), 0)
         }
         adapter = RowsAdapter()
         listHost = RecyclerView(this).apply {
             layoutManager = LinearLayoutManager(this@CarPlayerActivity)
             setHasFixedSize(true)
+            clipToPadding = false
+            setPadding(dp(12), dp(6), dp(12), dp(10))
         }
         miniTitle = TextView(this).apply {
             setTextColor(Color.WHITE)
@@ -153,7 +155,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setPadding(dp(4), 0, dp(4), 0)
         }
         miniPos = TextView(this).apply {
-            setTextColor(Color.LTGRAY)
+            setTextColor(Color.parseColor("#9AA5B1"))
             textSize = 11f
             setPadding(dp(6), 0, 0, 0)
         }
@@ -185,7 +187,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         heroMeta = TextView(this).apply {
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(Color.parseColor("#4FC3F7"))
             textSize = 11f
             text = "CONTINUE WATCHING"
             setPadding(0, dp(2), 0, dp(6))
@@ -214,18 +216,38 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         navRail = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#0C0F16"))
-            setPadding(dp(6), dp(10), dp(6), dp(10))
+            setPadding(dp(10), dp(14), dp(10), dp(10))
+            addView(
+                TextView(this).apply {
+                    text = "▶ RoadPlay"
+                    setTextColor(Color.parseColor("#4FC3F7"))
+                    textSize = 17f
+                    setPadding(dp(8), 0, 0, dp(2))
+                },
+            )
+            addView(
+                TextView(this).apply {
+                    text = "Your Media, On the Road"
+                    setTextColor(Color.parseColor("#9AA5B1"))
+                    textSize = 10f
+                    setPadding(dp(8), 0, 0, dp(6))
+                },
+            )
+            addView(
+                View(this).apply { setBackgroundColor(Color.parseColor("#262B36")) },
+                LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) },
+            )
         }
         fun navItem(label: String, id: String, selected: Boolean = false) {
             val item = TextView(this).apply {
                 text = label
-                setTextColor(Color.WHITE)
+                setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
                 textSize = 15f
-                setPadding(dp(14), dp(12), dp(14), dp(12))
+                setPadding(dp(12), dp(14), dp(12), dp(14))
                 if (selected) background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
                 setOnClickListener { navTo(id, label) }
             }
-            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
+            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
             navButtons.add(label to item)
         }
         navItem("Home", MediaIds.RECENT_ROOT, selected = true)
@@ -237,7 +259,18 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
         val contentPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(titleView)
+            addView(
+                FrameLayout(this@CarPlayerActivity).apply {
+                    background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_glass_panel)
+                    setPadding(dp(10), dp(4), dp(10), dp(4))
+                    addView(titleView, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+                },
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(10)
+                    marginStart = dp(12)
+                    marginEnd = dp(12)
+                },
+            )
             addView(
                 heroCard,
                 LinearLayout.LayoutParams(-1, -2).apply {
@@ -249,7 +282,14 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(listHost, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(emptyView, LinearLayout.LayoutParams(-1, 0, 1f))
             // Mini player floats above the AA host's own media pill.
-            addView(miniBar, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(72) })
+            addView(
+                miniBar,
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(72)
+                    marginStart = dp(12)
+                    marginEnd = dp(12)
+                },
+            )
         }
         val listPane = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -367,9 +407,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         urlBar = EditText(this).apply {
             setSingleLine(true)
             setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
+            setHintTextColor(Color.parseColor("#9AA5B1"))
             setHint("Search or type URL")
             imeOptions = EditorInfo.IME_ACTION_GO
+            background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_url_pill)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
             setTextSize(13f)
             setOnEditorActionListener { _, action, _ ->
                 if (action == EditorInfo.IME_ACTION_GO) { openUrl(text.toString()); true } else false
@@ -398,6 +440,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
             settings.loadsImagesAutomatically = true
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
@@ -749,8 +792,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         // Unknown labels (folder titles) keep the current selection instead of clearing it.
         if (navButtons.none { it.first == label }) return
         for ((name, view) in navButtons) {
+            val selected = name == label
             view.background =
-                if (name == label) ContextCompat.getDrawable(this, R.drawable.bg_nav_selected) else null
+                if (selected) ContextCompat.getDrawable(this, R.drawable.bg_nav_selected) else null
+            view.setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
         }
     }
 
@@ -948,14 +993,18 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         val transparent = ColorDrawable(Color.TRANSPARENT)
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(16), dp(6), dp(16), dp(6))
-            minimumHeight = dp(76)
+            // Card-style rows: rounded card + inner padding, spaced by RecyclerView margins.
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), ContextCompat.getDrawable(context, R.drawable.bg_nav_selected_focus))
+                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_row_card))
+            }
+            layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
+                setMargins(dp(0), 0, dp(0), dp(8))
+            }
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            minimumHeight = dp(80)
             isClickable = true
             isFocusable = true
-            background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_focused), highlight)
-                addState(intArrayOf(), transparent)
-            }
             addView(thumb)
             addView(icon)
             addView(label)
