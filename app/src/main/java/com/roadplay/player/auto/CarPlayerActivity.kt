@@ -337,13 +337,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         val future = MediaBrowser.Builder(this, token).buildAsync()
         future.addListener({
             try {
-                controller = future.get().also { c ->
-                    Log.i(TAG, "connect: connected")
-                    emptyView.text = "Connected — loading library…"
-                    c.addListener(this)
-                    show(trail.last().second, trail.last().first)
-                    updateVideoOverlay(c)
-                }
+                val c: MediaBrowser = future.get()
+                controller = c
+                Log.i(TAG, "connect: connected")
+                emptyView.text = "Connected — loading library…"
+                c.addListener(this)
+                show(trail.last().second, trail.last().first)
+                updateVideoOverlay(c)
             } catch (t: Throwable) {
                 Log.e(TAG, "connect: FAILED", t)
                 showEmpty("Player connect failed: ${t.message}")
