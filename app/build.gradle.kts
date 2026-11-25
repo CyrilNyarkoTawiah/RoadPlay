@@ -20,8 +20,8 @@ android {
         applicationId = "com.roadplay.player"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -62,6 +62,13 @@ dependencies {
     // The (old, partner-only) Android Auto SDK that lets a media app show its own
     // Activity — and video — on the head unit while the car is parked.
     implementation(files("libs/aauto.aar"))
+    // Runtime deps of the vendored legacy AA SDK: files() has no POM, so transitive
+    // androidx libs are never pulled and the host's CarActivity base class dies with
+    // NoClassDefFoundError (androidx/fragment/app/FragmentManager) on launch.
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.media:media:1.7.1")
+    implementation("androidx.annotation:annotation:1.9.1")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
