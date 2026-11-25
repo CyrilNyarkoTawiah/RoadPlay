@@ -108,8 +108,14 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private var retryFired = false
     private lateinit var keyboardPane: LinearLayout
     private var keyboardToWebView = false
+    private var customView: View? = null
+    private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var gridMode = false
     private lateinit var gridToggle: ImageView
+    private var wasVideoExpanded = false
+    private var wasPlaying = false
+    private var everStarted = false
+    private var everConnected = false
 
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
@@ -416,6 +422,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addButton(R.drawable.ic_replay_10) { controller?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
             addButton(R.drawable.ic_play_arrow, emphasized = true) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
             addButton(R.drawable.ic_forward_10) { controller?.let { it.seekTo(it.currentPosition + 10_000) } }
+            addButton(R.drawable.ic_aspect_ratio, 22) { cycleAspect() }
             addButton(R.drawable.ic_skip_next) { controller?.seekToNextMediaItem() }
         }
 
@@ -448,6 +455,17 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                     marginEnd = dp(10)
                     bottomMargin = dp(14)
                 },
+            )
+            aspectToast = TextView(this).apply {
+                setTextColor(Color.WHITE)
+                textSize = 13f
+                background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_mini)
+                setPadding(dp(12), dp(4), dp(12), dp(4))
+                visibility = View.GONE
+            }
+            addView(
+                aspectToast,
+                FrameLayout.LayoutParams(-2, -2, Gravity.CENTER).apply { bottomMargin = dp(120) },
             )
         }
 
@@ -547,6 +565,35 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
                     Log.i(TAG, "web console: ${consoleMessage.message()} @${consoleMessage.sourceId()}:${consoleMessage.lineNumber()}")
                     return true
+                }
+
+                // HTML5 video fullscreen (YouTube's fullscreen button) — swap the custom
+                // fullscreen view into the pane and restore the page when it closes.
+                override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
+                    if (customView != null) {
+                        callback.onCustomViewHidden()
+                        return
+                    }
+                    Log.i(TAG, "web fullscreen enter")
+                    customView = view
+                    customViewCallback = callback
+                    webView.visibility = View.GONE
+                    urlPane.visibility = View.GONE
+                    webStatus.visibility = View.GONE
+                    webViewPane.addView(
+                        view,
+                        LinearLayout.LayoutParams(-1, 0, 1f),
+                    )
+                }
+
+                override fun onHideCustomView() {
+                    Log.i(TAG, "web fullscreen exit")
+                    customView?.let { webViewPane.removeView(it) }
+                    customView = null
+                    webView.visibility = View.VISIBLE
+                    urlPane.visibility = View.VISIBLE
+                    customViewCallback?.onCustomViewHidden()
+                    customViewCallback = null
                 }
             }
             setBackgroundColor(Color.BLACK)
@@ -678,16 +725,21 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     override fun onStart() {
         super.onStart()
         Log.i(TAG, "onStart")
-        // Library-first: every entry opens at the root, even if a movie auto-resumes.
-        videoExpanded = false
-        trail.clear()
-        trail.addLast(rootTitle() to MediaIds.ROOT)
+        // Library-first applies on a fresh connect only. If the AA host restarted us
+        // (e.g. a gear change), keep the user exactly where they were.
+        if (everStarted && wasVideoExpanded) {
+            Log.i(TAG, "host restarted while video open — restoring video page")
+            videoExpanded = true
+        }
+        everStarted = true
         loadSettings()
         connect()
     }
 
     override fun onStop() {
         Log.i(TAG, "onStop")
+        wasVideoExpanded = videoExpanded
+        wasPlaying = controller?.isPlaying == true
         main.removeCallbacks(hideRun)
         main.removeCallbacks(positionRun)
         webView.onPause()
@@ -716,18 +768,35 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 Log.i(TAG, "connect: connected")
                 emptyView.text = "Connected — loading library…"
                 c.addListener(this)
-                navTo(MediaIds.RECENT_ROOT, "Home")
-                // Never auto-play on connect — the user decides what plays.
-                main.post {
-                    controller?.let { cc ->
-                        if (cc.isPlaying || cc.playbackState == Player.STATE_BUFFERING) {
-                            cc.pause()
-                            Log.i(TAG, "auto-play suppressed on connect")
+                if (everConnected && wasVideoExpanded) {
+                    // Host restart (gear change etc.) — put the movie back on screen
+                    // and resume what the user was watching.
+                    videoExpanded = true
+                    updateVideoOverlay(c)
+                    main.post(positionRun)
+                    main.postDelayed({
+                        controller?.let { cc ->
+                            if (wasPlaying && !cc.isPlaying && cc.currentMediaItem != null) {
+                                cc.play()
+                                Log.i(TAG, "resumed playback after host restart")
+                            }
                         }
-                        updateVideoOverlay(cc)
+                    }, 700)
+                } else {
+                    navTo(MediaIds.RECENT_ROOT, "Home")
+                    // Never auto-play on connect — the user decides what plays.
+                    main.post {
+                        controller?.let { cc ->
+                            if (cc.isPlaying || cc.playbackState == Player.STATE_BUFFERING) {
+                                cc.pause()
+                                Log.i(TAG, "auto-play suppressed on connect")
+                            }
+                            updateVideoOverlay(cc)
+                        }
                     }
+                    main.post(positionRun)
                 }
-                main.post(positionRun)
+                everConnected = true
             } catch (t: Throwable) {
                 Log.e(TAG, "connect: FAILED", t)
                 showEmpty("Player connect failed: ${t.message}")
@@ -1188,24 +1257,62 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         main.post { fitSurface(videoSize) }
     }
 
-    /** Keep the movie's aspect ratio on the ultrawide head unit — no stretch, no crop. */
+    /** Keep the chosen aspect ratio on the ultrawide head unit (VLC-style modes). */
+    private val aspectNames = arrayOf("Best fit", "Stretch", "16:9", "4:3", "2.35:1", "1:1")
+    private var aspectMode = 0
+    private var lastVideoSize: VideoSize? = null
+    private lateinit var aspectToast: TextView
+
     private fun fitSurface(vs: VideoSize) {
         if (vs.width == 0 || vs.height == 0) return
+        lastVideoSize = vs
         val w = videoOverlay.width
         val h = videoOverlay.height
         if (w == 0 || h == 0) {
             main.postDelayed({ fitSurface(vs) }, 100)
             return
         }
-        val scale = minOf(w.toFloat() / vs.width, h.toFloat() / vs.height)
-        videoSurfaceView.layoutParams = videoSurfaceView.layoutParams.apply {
-            width = (vs.width * scale).toInt().coerceAtLeast(1)
-            height = (vs.height * scale).toInt().coerceAtLeast(1)
+        val target: Float = when (aspectMode) {
+            1 -> w.toFloat() / h // stretch to the panel
+            2 -> 16f / 9f
+            3 -> 4f / 3f
+            4 -> 2.35f
+            5 -> 1f
+            else -> vs.width.toFloat() / vs.height // best fit
         }
+        val lp = videoSurfaceView.layoutParams
+        if (aspectMode == 1) {
+            lp.width = w
+            lp.height = h
+        } else {
+            var sw = w.toFloat()
+            var sh = sw / target
+            if (sh > h) {
+                sh = h.toFloat()
+                sw = sh * target
+            }
+            lp.width = sw.toInt().coerceAtLeast(1)
+            lp.height = sh.toInt().coerceAtLeast(1)
+        }
+        videoSurfaceView.layoutParams = lp
         Log.i(
             TAG,
-            "fitSurface ${vs.width}x${vs.height} -> ${videoSurfaceView.layoutParams.width}x${videoSurfaceView.layoutParams.height}",
+            "fitSurface[${aspectNames[aspectMode]}] ${vs.width}x${vs.height} -> ${lp.width}x${lp.height}",
         )
+    }
+
+    private fun cycleAspect() {
+        aspectMode = (aspectMode + 1) % aspectNames.size
+        Log.i(TAG, "aspect ratio: ${aspectNames[aspectMode]}")
+        lastVideoSize?.let { fitSurface(it) }
+        aspectToast.text = "Aspect: ${aspectNames[aspectMode]}"
+        aspectToast.visibility = View.VISIBLE
+        main.removeCallbacks(aspectToastHide)
+        main.postDelayed(aspectToastHide, 1600)
+    }
+
+    private val aspectToastHide = Runnable {
+        if (this::aspectToast.isInitialized) aspectToast.visibility = View.GONE
     }
 
     // ---- Keys ------------------------------------------------------------------------------
@@ -1225,6 +1332,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
         }
         if (webViewPane.visibility == View.VISIBLE && keyCode == KeyEvent.KEYCODE_BACK) {
+            if (customView != null) {
+                onHideCustomView()
+                return true
+            }
             if (webView.canGoBack()) webView.goBack() else closeBrowser()
             return true
         }
