@@ -31,6 +31,7 @@ fun VideoEntity.toMediaItem(): MediaItem =
     MediaItem.Builder()
         .setMediaId(MediaIds.video(id))
         .setUri(uri)
+        .setMimeType("video/*")
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(label())

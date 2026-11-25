@@ -523,8 +523,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private fun updateVideoOverlay(c: MediaBrowser) {
         val video = c.videoSize.width > 0
         val mime = c.currentMediaItem?.localConfiguration?.mimeType
-        val videoItem = video || mime?.startsWith("video") == true
-        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=$video mime=$mime")
+        // Detect our library videos by mediaId scheme — mimeType is null until the
+        // item is re-resolved, so it cannot be the only signal.
+        val ourVideo = c.currentMediaItem?.mediaId?.let { MediaIds.parseVideo(it) != null } == true
+        val videoItem = video || mime?.startsWith("video") == true || ourVideo
+        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=$video mime=$mime ourVideo=$ourVideo")
         val wasVisible = videoOverlay.visibility == View.VISIBLE
         videoOverlay.visibility = if (videoItem) View.VISIBLE else View.GONE
         if (videoItem) {
