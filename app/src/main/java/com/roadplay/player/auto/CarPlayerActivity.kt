@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.Surface
 import android.view.SurfaceHolder
+import android.util.Log
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -58,6 +59,8 @@ import kotlinx.coroutines.launch
  */
 class CarPlayerActivity : CarActivity(), Player.Listener {
 
+    companion object { private const val TAG = "RoadPlayCar" }
+
     private val main = Handler(Looper.getMainLooper())
     private var controller: MediaBrowser? = null
     private var surface: Surface? = null
@@ -100,6 +103,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         titleView = TextView(this).apply {
             setTextColor(Color.WHITE)
             textSize = 20f
+            text = try {
+                "RoadPlay v" + packageManager.getPackageInfo(packageName, 0).versionName
+            } catch (_: Throwable) { "RoadPlay" }
             setPadding(dp(20), dp(16), dp(20), dp(8))
             setSingleLine(true)
         }
@@ -107,6 +113,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setTextColor(Color.GRAY)
             textSize = 15f
             gravity = Gravity.CENTER
+            text = "Starting…"
             setPadding(dp(20), dp(40), dp(20), 0)
         }
         adapter = RowsAdapter()
@@ -116,7 +123,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         val listPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.BLACK)
+            // Slightly tinted (not pure black): if the unit shows exactly this shade,
+            // the activity renders but its content failed; pitch black means no draw at all.
+            setBackgroundColor(Color.parseColor("#12121A"))
             addView(titleView)
             addView(listHost, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(emptyView, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -287,7 +296,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 val s = RoadPlayApp.instance.container.settings.settings.first()
                 hideSeconds = s.carControlsHideSeconds.coerceIn(1, 10)
                 browserHome = s.browserHomeUrl
-            } catch (_: Throwable) { /* defaults are fine */ }
+                Log.i(TAG, "settings: hide=${hideSeconds}s home=$browserHome")
+            } catch (t: Throwable) {
+                Log.e(TAG, "settings load failed", t)
+            }
         }
     }
 
@@ -295,11 +307,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     override fun onStart() {
         super.onStart()
+        Log.i(TAG, "onStart")
         loadSettings()
         connect()
     }
 
     override fun onStop() {
+        Log.i(TAG, "onStop")
         main.removeCallbacks(hideRun)
         main.removeCallbacks(positionRun)
         webView.onPause()
@@ -317,17 +331,22 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     // ---- Connection -----------------------------------------------------------------------
 
     private fun connect() {
+        Log.i(TAG, "connect: building MediaBrowser")
+        emptyView.text = "Connecting to player…"
         val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
         val future = MediaBrowser.Builder(this, token).buildAsync()
         future.addListener({
             try {
                 controller = future.get().also { c ->
+                    Log.i(TAG, "connect: connected")
+                    emptyView.text = "Connected — loading library…"
                     c.addListener(this)
                     show(trail.last().second, trail.last().first)
                     updateVideoOverlay(c)
                 }
             } catch (t: Throwable) {
-                showEmpty("Could not reach the player")
+                Log.e(TAG, "connect: FAILED", t)
+                showEmpty("Player connect failed: ${t.message}")
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -343,6 +362,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         future.addListener({
             try {
                 val children = future.get().value.orEmpty()
+                Log.i(TAG, "show($parentId): ${children.size} children")
                 rows.clear()
                 if (parentId != MediaIds.ROOT) rows.add(Row("‹ Back", null, Row.Kind.BACK))
                 for (item in children) {
@@ -361,11 +381,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 titleView.text = title
                 trail.removeLastOrNull()
                 trail.addLast(title to parentId)
+                if (rows.isEmpty()) emptyView.text = "No items in $title"
                 emptyView.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 listHost.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
                 adapter.notifyDataSetChanged()
             } catch (t: Throwable) {
-                showEmpty("Browse failed")
+                Log.e(TAG, "show($parentId) FAILED", t)
+                showEmpty("Browse failed: ${t.message}")
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -428,13 +450,17 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private inner class SurfaceLifecycle : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
+            Log.i(TAG, "surfaceCreated")
             surface = holder.surface ?: return
             controller?.let { sendCarSurface(it) }
         }
 
-        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            Log.i(TAG, "surfaceChanged ${width}x$height")
+        }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
+            Log.i(TAG, "surfaceDestroyed")
             surface = null
             controller?.let { clearCarSurface(it) }
         }
@@ -442,10 +468,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private fun updateVideoOverlay(c: MediaBrowser) {
         val showVideo = c.isPlaying && c.videoSize.width > 0
+        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=${c.videoSize} -> overlay=$showVideo")
         videoOverlay.visibility = if (showVideo) View.VISIBLE else View.GONE
         if (showVideo) {
             showControls()
-            surface?.let { if (!surfaceSent) sendCarSurface(c) }
+            surface?.let { if (!surfaceSent) sendCarSurface(it) }
         } else if (surfaceSent) {
             clearCarSurface(c)
         }
@@ -454,12 +481,14 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private fun sendCarSurface(c: MediaBrowser) {
         val s = surface ?: return
         val args = Bundle().apply { putParcelable(RoadPlayCommands.ARG_SURFACE, s) }
+        Log.i(TAG, "sendCarSurface")
         c.sendCustomCommand(SessionCommand(RoadPlayCommands.SET_CAR_SURFACE, Bundle.EMPTY), args)
         surfaceSent = true
     }
 
     private fun clearCarSurface(c: MediaBrowser) {
         if (!surfaceSent) return
+        Log.i(TAG, "clearCarSurface")
         surfaceSent = false
         c.sendCustomCommand(SessionCommand(RoadPlayCommands.CLEAR_CAR_SURFACE, Bundle.EMPTY), Bundle.EMPTY)
     }
