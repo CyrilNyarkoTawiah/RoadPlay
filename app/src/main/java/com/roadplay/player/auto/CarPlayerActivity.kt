@@ -521,20 +521,24 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     private fun updateVideoOverlay(c: MediaBrowser) {
-        val showVideo = c.isPlaying && c.videoSize.width > 0
-        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=${c.videoSize} -> overlay=$showVideo")
-        videoOverlay.visibility = if (showVideo) View.VISIBLE else View.GONE
-        if (showVideo) {
-            showControls()
+        val video = c.videoSize.width > 0
+        val mime = c.currentMediaItem?.localConfiguration?.mimeType
+        val videoItem = video || mime?.startsWith("video") == true
+        Log.i(TAG, "updateVideoOverlay: playing=${c.isPlaying} video=$video mime=$mime")
+        val wasVisible = videoOverlay.visibility == View.VISIBLE
+        videoOverlay.visibility = if (videoItem) View.VISIBLE else View.GONE
+        if (videoItem) {
+            // Attach the car surface FIRST — ExoPlayer only decodes/reports video
+            // once it has an output surface. Waiting for videoSize deadlocks.
             surface?.let { if (!surfaceSent) sendCarSurface(c) }
-        } else if (surfaceSent) {
-            clearCarSurface(c)
-        }
-        // Audio-only fallback: keep the list visible and say why there is no picture.
-        if (c.isPlaying && !showVideo) {
-            emptyView.text = "Playing audio only — no video stream on this screen"
-            emptyView.visibility = View.VISIBLE
-            listHost.visibility = View.VISIBLE
+            if (!wasVisible) showControls()
+        } else {
+            if (surfaceSent) clearCarSurface(c)
+            if (c.isPlaying) {
+                emptyView.text = "Playing audio only — no video stream on this screen"
+                emptyView.visibility = View.VISIBLE
+                listHost.visibility = View.VISIBLE
+            }
         }
     }
 
