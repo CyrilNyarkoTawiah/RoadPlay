@@ -5,6 +5,7 @@ package com.roadplay.player.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Surface
 import androidx.core.os.BundleCompat
 import androidx.media3.common.AudioAttributes
@@ -60,6 +61,8 @@ object RoadPlayCommands {
  * controller disables the video track entirely (audio-only).
  */
 class PlaybackService : MediaLibraryService() {
+
+    companion object { private const val TAG = "RoadPlaySrv" }
 
     private var librarySession: MediaLibrarySession? = null
     private lateinit var exo: ExoPlayer
@@ -223,6 +226,7 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
         ): MediaSession.ConnectionResult {
+            Log.i(TAG, "onConnect: ${controller.packageName} uid=${controller.uid}")
             val commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
                 .add(RoadPlayCommands.sleepTimer)
                 .add(RoadPlayCommands.setCarSurface)
@@ -302,7 +306,9 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: MediaLibraryService.LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future {
+            Log.i(TAG, "onGetChildren: parent=$parentId page=$page size=$pageSize from=${browser.packageName}")
             val children = childrenOf(parentId)
+            Log.i(TAG, "onGetChildren: parent=$parentId -> ${children?.size ?: "null (bad id)"}")
             if (children == null) LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
             else LibraryResult.ofItemList(ImmutableList.copyOf(children.paged(page, pageSize)), params)
         }

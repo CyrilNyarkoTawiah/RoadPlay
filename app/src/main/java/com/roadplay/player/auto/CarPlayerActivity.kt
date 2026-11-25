@@ -353,15 +353,27 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     // ---- Browsing -------------------------------------------------------------------------
 
+    private var browsePending = false
+
     private fun show(parentId: String, title: String) {
         webViewPane.visibility = View.GONE
         listHost.visibility = View.VISIBLE
         emptyView.visibility = View.GONE
         val c = controller ?: return
+        Log.i(TAG, "show: requesting children of $parentId")
+        browsePending = true
+        // Watchdog: if the service never answers, say so on the head unit.
+        main.postDelayed({
+            if (browsePending) {
+                Log.w(TAG, "show($parentId) TIMED OUT — getChildren never answered")
+                showEmpty("Library did not respond (5s timeout)")
+            }
+        }, 5000)
         val future = c.getChildren(parentId, 0, Int.MAX_VALUE, null)
         future.addListener({
             try {
                 val children = future.get().value.orEmpty()
+                browsePending = false
                 Log.i(TAG, "show($parentId): ${children.size} children")
                 rows.clear()
                 if (parentId != MediaIds.ROOT) rows.add(Row("‹ Back", null, Row.Kind.BACK))
@@ -387,6 +399,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 adapter.notifyDataSetChanged()
             } catch (t: Throwable) {
                 Log.e(TAG, "show($parentId) FAILED", t)
+                browsePending = false
                 showEmpty("Browse failed: ${t.message}")
             }
         }, ContextCompat.getMainExecutor(this))
