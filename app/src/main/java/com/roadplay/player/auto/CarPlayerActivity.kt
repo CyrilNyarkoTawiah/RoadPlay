@@ -39,6 +39,7 @@ import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.apps.auto.sdk.CarActivity
+import com.roadplay.player.R
 import com.roadplay.player.RoadPlayApp
 import com.roadplay.player.playback.MediaIds
 import com.roadplay.player.playback.PlaybackService
@@ -63,7 +64,11 @@ import kotlinx.coroutines.launch
  */
 class CarPlayerActivity : CarActivity(), Player.Listener {
 
-    companion object { private const val TAG = "RoadPlayCar" }
+    companion object {
+        private const val TAG = "RoadPlayCar"
+        private const val NAV_BROWSER = "__browser__"
+        private const val NAV_YOUTUBE = "__youtube__"
+    }
 
     private val main = Handler(Looper.getMainLooper())
     private var controller: MediaBrowser? = null
@@ -92,9 +97,17 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private lateinit var miniBar: LinearLayout
     private lateinit var miniTitle: TextView
     private lateinit var miniPos: TextView
+    private lateinit var navRail: LinearLayout
+    private lateinit var heroCard: LinearLayout
+    private lateinit var heroTitle: TextView
+    private lateinit var heroMeta: TextView
 
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
+    private var homeNav = false
+    private val navButtons = mutableListOf<Pair<String, LinearLayout>>()
+    private var heroRow: Row? = null
+    private val thumbPool: java.util.concurrent.Executor = java.util.concurrent.Executors.newFixedThreadPool(2)
 
     /** Back stack of (title, parentId); last = currently shown. */
     private val trail = ArrayDeque<Pair<String, String>>()
@@ -164,16 +177,87 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             )
             addView(controlButton("✕") { controller?.stop() })
         }
-        val listPane = LinearLayout(this).apply {
+        // ---- Home hero (Continue Watching) ------------------------------------------------
+        heroTitle = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setSingleLine(true)
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        heroMeta = TextView(this).apply {
+            setTextColor(Color.parseColor("#8AB4F8"))
+            textSize = 11f
+            text = "CONTINUE WATCHING"
+            setPadding(0, dp(2), 0, dp(6))
+        }
+        heroCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // Slightly tinted (not pure black): if the unit shows exactly this shade,
-            // the activity renders but its content failed; pitch black means no draw at all.
-            setBackgroundColor(Color.parseColor("#12121A"))
+            background = ContextCompat.getDrawable(context, R.drawable.bg_hero)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            visibility = View.GONE
+            addView(heroMeta)
+            addView(heroTitle)
+            addView(
+                TextView(this@CarPlayerActivity).apply {
+                    text = "▶ Resume"
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
+                    setPadding(dp(16), dp(6), dp(16), dp(6))
+                },
+                LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) },
+            )
+            setOnClickListener { heroRow?.let { r -> videoExpanded = true; playRow(r) } }
+        }
+
+        // ---- Sidebar navigation rail -------------------------------------------------------
+        navRail = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#0C0F16"))
+            setPadding(dp(6), dp(10), dp(6), dp(10))
+        }
+        fun navItem(label: String, id: String, selected: Boolean = false) {
+            val item = TextView(this).apply {
+                text = label
+                setTextColor(Color.WHITE)
+                textSize = 15f
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                if (selected) background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
+                setOnClickListener { navTo(id, label) }
+            }
+            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
+            navButtons.add(label to item)
+        }
+        navItem("Home", MediaIds.RECENT_ROOT, selected = true)
+        navItem("All Videos", MediaIds.ALL)
+        navItem("Favourites", MediaIds.FAVOURITES)
+        navItem("Playlists", MediaIds.PLAYLISTS)
+        navItem("🌐 Browser", NAV_BROWSER)
+        navItem("▶ YouTube", NAV_YOUTUBE)
+
+        val contentPane = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             addView(titleView)
+            addView(
+                heroCard,
+                LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(8)
+                    marginStart = dp(8)
+                    marginEnd = dp(8)
+                },
+            )
             addView(listHost, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(emptyView, LinearLayout.LayoutParams(-1, 0, 1f))
             // Mini player floats above the AA host's own media pill.
             addView(miniBar, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(72) })
+        }
+        val listPane = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            // Slightly tinted (not pure black): if the unit shows exactly this shade,
+            // the activity renders but its content failed; pitch black means no draw at all.
+            setBackgroundColor(Color.parseColor("#12121A"))
+            addView(navRail, LinearLayout.LayoutParams(dp(190), -1))
+            addView(contentPane, LinearLayout.LayoutParams(0, -1, 1f))
         }
 
         // ---- video layer ----------------------------------------------------------------
@@ -433,7 +517,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 Log.i(TAG, "connect: connected")
                 emptyView.text = "Connected — loading library…"
                 c.addListener(this)
-                show(trail.last().second, trail.last().first)
+                navTo(MediaIds.RECENT_ROOT, "Home")
                 updateVideoOverlay(c)
                 main.post(positionRun)
             } catch (t: Throwable) {
@@ -453,6 +537,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         emptyView.visibility = View.GONE
         val c = controller ?: return
         Log.i(TAG, "show: requesting children of $parentId")
+        highlightNav(title)
         browsePending = true
         // Watchdog: if the service never answers, say so on the head unit.
         main.postDelayed({
@@ -468,7 +553,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 browsePending = false
                 Log.i(TAG, "show($parentId): ${children.size} children")
                 rows.clear()
-                if (parentId != MediaIds.ROOT) rows.add(Row("‹ Back", null, Row.Kind.BACK))
+                if (parentId != MediaIds.ROOT && !homeNav) rows.add(Row("‹ Back", null, Row.Kind.BACK))
                 for (item in children) {
                     rows.add(
                         Row(
@@ -483,7 +568,16 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                     rows.add(Row("▶ YouTube", null, Row.Kind.YOUTUBE))
                 }
                 titleView.text = title
-                if (rows.isEmpty()) emptyView.text = "No items in $title"
+                if (homeNav) {
+                    val hr = rows.firstOrNull { it.kind == Row.Kind.VIDEO }
+                    heroRow = hr
+                    if (hr != null) {
+                        heroTitle.text = hr.title
+                        heroCard.visibility = View.VISIBLE
+                    } else heroCard.visibility = View.GONE
+                    if (rows.isEmpty()) emptyView.text = "Nothing watched yet — open All Videos"
+                } else heroCard.visibility = View.GONE
+                if (rows.isEmpty() && !homeNav) emptyView.text = "No items in $title"
                 emptyView.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 listHost.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
                 adapter.notifyDataSetChanged()
@@ -510,14 +604,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 trail.addLast(row.title to it)
                 show(it, row.title)
             }
-            else -> controller?.let { c ->
-                row.item?.let {
-                    videoExpanded = true
-                    c.setMediaItem(it)
-                    c.prepare()
-                    c.play()
-                }
-            }
+            else -> controller?.let { playRow(row) }
         }
     }
 
@@ -606,6 +693,40 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         videoExpanded = false
         main.removeCallbacks(hideRun)
         controller?.let { updateVideoOverlay(it) }
+    }
+
+    /** Sidebar navigation: switch the content pane and highlight the rail. */
+    private fun navTo(id: String, label: String) {
+        Log.i(TAG, "navTo $label ($id)")
+        homeNav = id == MediaIds.RECENT_ROOT
+        highlightNav(label)
+        trail.clear()
+        trail.addLast(label to id)
+        when (id) {
+            NAV_BROWSER -> openBrowser(browserHome)
+            NAV_YOUTUBE -> openBrowser("https://m.youtube.com")
+            else -> show(id, label)
+        }
+    }
+
+    private fun highlightNav(label: String) {
+        // Unknown labels (folder titles) keep the current selection instead of clearing it.
+        if (navButtons.none { it.first == label }) return
+        for ((name, view) in navButtons) {
+            view.background =
+                if (name == label) ContextCompat.getDrawable(this, R.drawable.bg_nav_selected) else null
+        }
+    }
+
+    private fun playRow(r: Row) {
+        controller?.let { c ->
+            r.item?.let {
+                videoExpanded = true
+                c.setMediaItem(it)
+                c.prepare()
+                c.play()
+            }
+        }
     }
 
     private fun sendCarSurface(c: MediaBrowser) {
@@ -764,6 +885,16 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     private fun makeRow(): LinearLayout {
+        val thumb = ImageView(this).apply {
+            val lp = LinearLayout.LayoutParams(dp(112), dp(63))
+            lp.gravity = Gravity.CENTER_VERTICAL
+            lp.marginEnd = dp(12)
+            layoutParams = lp
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = ContextCompat.getDrawable(context, R.drawable.bg_card)
+            clipToOutline = true
+            visibility = View.GONE
+        }
         val icon = ImageView(this).apply {
             val lp = LinearLayout.LayoutParams(dp(24), dp(24))
             lp.gravity = Gravity.CENTER_VERTICAL
@@ -771,8 +902,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         val label = TextView(this).apply {
             setTextColor(Color.WHITE)
-            textSize = 16f
-            setPadding(dp(16), 0, 0, 0)
+            textSize = 15f
+            setPadding(dp(12), 0, 0, 0)
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             lp.gravity = Gravity.CENTER_VERTICAL
             layoutParams = lp
@@ -781,22 +912,24 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         val transparent = ColorDrawable(Color.TRANSPARENT)
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(20), 0, dp(20), 0)
-            minimumHeight = dp(56)
+            setPadding(dp(16), dp(6), dp(16), dp(6))
+            minimumHeight = dp(76)
             isClickable = true
             isFocusable = true
             background = StateListDrawable().apply {
                 addState(intArrayOf(android.R.attr.state_focused), highlight)
                 addState(intArrayOf(), transparent)
             }
+            addView(thumb)
             addView(icon)
             addView(label)
         }
     }
 
     private inner class RowHolder(val row: LinearLayout) : RecyclerView.ViewHolder(row) {
-        private val icon = row.getChildAt(0) as ImageView
-        private val label = row.getChildAt(1) as TextView
+        private val thumb = row.getChildAt(0) as ImageView
+        private val icon = row.getChildAt(1) as ImageView
+        private val label = row.getChildAt(2) as TextView
         private lateinit var bound: Row
 
         init {
@@ -806,14 +939,57 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         fun bind(r: Row) {
             bound = r
             label.text = r.title
-            icon.setImageResource(
-                when (r.kind) {
-                    Row.Kind.BROWSER -> android.R.drawable.ic_menu_compass
-                    Row.Kind.YOUTUBE -> android.R.drawable.ic_media_play
-                    Row.Kind.FOLDER, Row.Kind.BACK -> android.R.drawable.ic_menu_agenda
-                    else -> android.R.drawable.ic_media_play
-                },
-            )
+            val videoId = r.item?.mediaId?.let { MediaIds.parseVideo(it) }
+            if (videoId != null) {
+                icon.visibility = View.GONE
+                thumb.visibility = View.VISIBLE
+                thumb.tag = videoId
+                thumbPool.execute {
+                    val bmp = loadThumb(videoId, r.item)
+                    main.post {
+                        if (thumb.tag != videoId) return@post
+                        thumb.setImageBitmap(bmp)
+                        thumb.visibility = if (bmp == null) View.GONE else View.VISIBLE
+                        icon.visibility = if (bmp == null) View.VISIBLE else View.GONE
+                        icon.setImageResource(android.R.drawable.ic_media_play)
+                    }
+                }
+            } else {
+                thumb.tag = null
+                thumb.visibility = View.GONE
+                icon.visibility = View.VISIBLE
+                icon.setImageResource(
+                    when (r.kind) {
+                        Row.Kind.BROWSER -> android.R.drawable.ic_menu_compass
+                        Row.Kind.YOUTUBE -> android.R.drawable.ic_media_play
+                        Row.Kind.FOLDER, Row.Kind.BACK -> android.R.drawable.ic_menu_agenda
+                        else -> android.R.drawable.ic_media_play
+                    },
+                )
+            }
+        }
+    }
+
+    /** Frame extraction for list thumbnails, cached on disk as thumbs/<videoId>.jpg. */
+    private fun loadThumb(videoId: Long, item: MediaItem?): android.graphics.Bitmap? {
+        val cache = java.io.File(filesDir, "thumbs/$videoId.jpg")
+        if (cache.exists()) return android.graphics.BitmapFactory.decodeFile(cache.absolutePath)
+        val uri = item?.localConfiguration?.uri ?: return null
+        return try {
+            val mmr = android.media.MediaMetadataRetriever()
+            mmr.setDataSource(this, uri)
+            val bmp = mmr.getFrameAtTime(1_000_000L)
+            mmr.release()
+            if (bmp != null) {
+                cache.parentFile?.mkdirs()
+                java.io.FileOutputStream(cache).use {
+                    bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 60, it)
+                }
+            }
+            bmp
+        } catch (t: Throwable) {
+            Log.w(TAG, "thumb $videoId failed: ${t.message}")
+            null
         }
     }
 
