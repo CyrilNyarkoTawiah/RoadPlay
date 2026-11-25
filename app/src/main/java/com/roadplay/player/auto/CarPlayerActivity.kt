@@ -105,7 +105,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
     private var homeNav = false
-    private val navButtons = mutableListOf<Pair<String, LinearLayout>>()
+    private val navButtons = mutableListOf<Pair<String, TextView>>()
     private var heroRow: Row? = null
     private val thumbPool: java.util.concurrent.Executor = java.util.concurrent.Executors.newFixedThreadPool(2)
 
@@ -159,7 +159,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         miniBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.argb(230, 14, 16, 24))
+            background = ContextCompat.getDrawable(context, R.drawable.bg_mini)
             setPadding(dp(12), dp(8), dp(12), dp(8))
             gravity = Gravity.CENTER_VERTICAL
             addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
@@ -271,8 +271,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
         topBar = FrameLayout(this).apply {
-            setBackgroundColor(Color.argb(140, 0, 0, 0))
-            setPadding(0, dp(6), 0, dp(6))
+            background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_glass_panel)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
             addView(videoTitle, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
             addView(
                 controlButton("‹") { collapseVideo() },
@@ -294,9 +294,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             gravity = Gravity.CENTER
         }
         seekBar = SeekBar(this).apply {
-            maxHeight = dp(4)
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            maxHeight = dp(8)
+            progressDrawable = ContextCompat.getDrawable(context, R.drawable.bg_seek)
+            thumb = ContextCompat.getDrawable(context, R.drawable.seek_thumb)
+            thumbOffset = dp(-9)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
@@ -313,7 +314,6 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         val seekRow = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.argb(140, 0, 0, 0))
             setPadding(dp(16), dp(6), dp(16), dp(2))
             addView(seekBar, LinearLayout.LayoutParams(-1, -2))
             addView(posLabel, LinearLayout.LayoutParams(-1, -2))
@@ -321,7 +321,6 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.argb(140, 0, 0, 0))
             setPadding(dp(12), dp(4), dp(12), dp(10))
             gravity = Gravity.CENTER
             // equal-weight buttons so nothing ever overlaps
@@ -337,6 +336,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(seekRow, LinearLayout.LayoutParams(-1, -2))
             addView(btnRow, LinearLayout.LayoutParams(-1, -2))
         }
+        bottomControls.background =
+            ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_glass_panel)
         controlsBar = bottomControls
         videoOverlay = FrameLayout(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -344,8 +345,22 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             // tap anywhere = show controls; second tap while visible = also refresh timer
             setOnClickListener { showControls() }
             addView(videoSurfaceView, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
-            addView(topBar, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
-            addView(bottomControls, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+            addView(
+                topBar,
+                FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                    topMargin = dp(8)
+                },
+            )
+            addView(
+                bottomControls,
+                FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
+                    marginStart = dp(10)
+                    marginEnd = dp(10)
+                    bottomMargin = dp(14)
+                },
+            )
         }
 
         // ---- web layer ------------------------------------------------------------------
@@ -365,9 +380,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setBackgroundColor(Color.argb(160, 0, 0, 0))
             setPadding(dp(10), dp(6), dp(10), dp(6))
             gravity = Gravity.CENTER_VERTICAL
+            addView(controlButton("‹") { if (webView.canGoBack()) webView.goBack() else closeBrowser() })
             addView(urlBar, LinearLayout.LayoutParams(0, -2, 1f))
             addView(controlButton("⌂") { openUrl(browserHome) })
             addView(controlButton("⟳") { webView.reload() })
+            addView(controlButton("✕") { closeBrowser() })
         }
         webStatus = TextView(this).apply {
             setTextColor(Color.LTGRAY)
@@ -381,6 +398,14 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.loadsImagesAutomatically = true
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.databaseEnabled = true
+            settings.allowFileAccess = true
+            settings.javaScriptCanOpenWindowsAutomatically = true
+            android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             settings.userAgentString =
                 "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) " +
                     "Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -404,6 +429,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                         webStatus.text = "Loading $newProgress%…"
                         webStatus.visibility = View.VISIBLE
                     } else webStatus.visibility = View.GONE
+                }
+
+                override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
+                    Log.i(TAG, "web console: ${consoleMessage.message()} @${consoleMessage.sourceId()}:${consoleMessage.lineNumber()}")
+                    return true
                 }
             }
             setBackgroundColor(Color.BLACK)
@@ -434,22 +464,28 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         "RoadPlay v" + packageManager.getPackageInfo(packageName, 0).versionName
     } catch (_: Throwable) { "RoadPlay" }
 
-    /** Uniform control chip: fixed square, centred glyph, ripple-ish focus state. */
+    /** Uniform control chip: circular glass button with a blue focus/press glow. */
     private fun controlButton(glyph: String, onClick: (View) -> Unit): TextView =
         TextView(this).apply {
             text = glyph
             setTextColor(Color.WHITE)
-            textSize = 22f
+            textSize = 20f
             gravity = Gravity.CENTER
-            minWidth = dp(52)
-            minHeight = dp(44)
+            minWidth = dp(56)
+            minHeight = dp(48)
             setPadding(dp(10), 0, dp(10), 0)
             isClickable = true
             isFocusable = true
             background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_pressed), ColorDrawable(Color.argb(80, 255, 255, 255)))
-                addState(intArrayOf(android.R.attr.state_focused), ColorDrawable(Color.argb(60, 255, 255, 255)))
-                addState(intArrayOf(), ColorDrawable(Color.TRANSPARENT))
+                addState(
+                    intArrayOf(android.R.attr.state_pressed),
+                    ContextCompat.getDrawable(context, R.drawable.bg_glass_btn_focus),
+                )
+                addState(
+                    intArrayOf(android.R.attr.state_focused),
+                    ContextCompat.getDrawable(context, R.drawable.bg_glass_btn_focus),
+                )
+                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_glass_btn))
             }
             setOnClickListener(onClick)
         }
