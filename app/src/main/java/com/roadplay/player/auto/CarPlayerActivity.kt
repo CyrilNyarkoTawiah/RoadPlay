@@ -767,11 +767,15 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 } else {
                     navTo(MediaIds.RECENT_ROOT, "Home")
                     // Never auto-play on connect — the user decides what plays.
+                    // Pause immediately: playWhenReady=false survives any later
+                    // buffering transition, so the late-start race is closed.
+                    c.pause()
+                    Log.i(TAG, "auto-play suppressed on connect (immediate)")
                     main.post {
                         controller?.let { cc ->
-                            if (cc.isPlaying || cc.playbackState == Player.STATE_BUFFERING) {
+                            if (cc.playWhenReady || cc.isPlaying || cc.playbackState == Player.STATE_BUFFERING) {
                                 cc.pause()
-                                Log.i(TAG, "auto-play suppressed on connect")
+                                Log.i(TAG, "auto-play suppressed on connect (post-check)")
                             }
                             updateVideoOverlay(cc)
                         }
