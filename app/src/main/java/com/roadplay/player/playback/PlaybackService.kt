@@ -203,11 +203,13 @@ class PlaybackService : MediaLibraryService() {
                 folderItem(MediaIds.PLAYLISTS, "Playlists"),
             )
             parentId == MediaIds.ALL ->
-                eligible(videos.getAll()).sortedBy { it.label().lowercase() }.map { it.toMediaItem() }
+                eligible(videos.getAll()).distinctBy { it.uri.lowercase() }
+                    .sortedBy { it.label().lowercase() }.map { it.toMediaItem() }
             parentId == MediaIds.FAVOURITES ->
-                eligible(videos.getAll()).filter { it.isFavourite }.sortedBy { it.label().lowercase() }.map { it.toMediaItem() }
+                eligible(videos.getAll()).filter { it.isFavourite }.distinctBy { it.uri.lowercase() }
+                    .sortedBy { it.label().lowercase() }.map { it.toMediaItem() }
             parentId == MediaIds.RECENT || parentId == MediaIds.RECENT_ROOT ->
-                eligible(videos.getAll()).filter { it.lastPlayedAt != null }
+                eligible(videos.getAll()).filter { it.lastPlayedAt != null }.distinctBy { it.uri.lowercase() }
                     .sortedByDescending { it.lastPlayedAt }.take(20).map { it.toMediaItem() }
             parentId == MediaIds.PLAYLISTS ->
                 playlists.observePlaylists().first().map { folderItem(MediaIds.playlist(it.id), it.name) }

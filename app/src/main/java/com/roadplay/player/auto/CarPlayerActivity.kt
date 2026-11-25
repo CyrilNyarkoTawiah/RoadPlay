@@ -36,6 +36,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.session.MediaBrowser
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.apps.auto.sdk.CarActivity
@@ -107,6 +108,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private var retryFired = false
     private lateinit var keyboardPane: LinearLayout
     private var keyboardToWebView = false
+    private var gridMode = false
+    private lateinit var gridToggle: ImageView
 
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
@@ -168,27 +171,27 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         miniBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = ContextCompat.getDrawable(context, R.drawable.bg_mini)
-            setPadding(dp(10), dp(10), dp(10), dp(10))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
             gravity = Gravity.CENTER_VERTICAL
             addView(
                 ImageView(this@CarPlayerActivity).apply { miniThumb = this }.apply {
                     scaleType = ImageView.ScaleType.CENTER_CROP
                     background = ContextCompat.getDrawable(context, R.drawable.bg_card)
                     clipToOutline = true
-                    layoutParams = LinearLayout.LayoutParams(dp(64), dp(36)).apply { marginEnd = dp(10) }
+                    layoutParams = LinearLayout.LayoutParams(dp(56), dp(34)).apply { marginEnd = dp(8) }
                 },
             )
             addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
             addView(miniPos)
-            playPauseButton = iconButton(R.drawable.ic_pause, 24) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
+            playPauseButton = iconButton(R.drawable.ic_pause, 20, w = 44, h = 40) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
             addView(playPauseButton)
             addView(
-                iconButton(R.drawable.ic_open_in_full, 18) { _ ->
+                iconButton(R.drawable.ic_open_in_full, 16, w = 44, h = 40) { _ ->
                     videoExpanded = true
                     controller?.let { updateVideoOverlay(it) }
                 },
             )
-            addView(iconButton(R.drawable.ic_close, 20) { controller?.stop() })
+            addView(iconButton(R.drawable.ic_close, 18, w = 44, h = 40) { controller?.stop() })
         }
         // ---- Home hero (Continue Watching) ------------------------------------------------
         heroTitle = TextView(this).apply {
@@ -253,7 +256,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             val item = LinearLayout(this@CarPlayerActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(12), dp(14), dp(12), dp(14))
+                setPadding(dp(10), dp(11), dp(10), dp(11))
                 // Every category carries its own colour card (per the mockup image);
                 // selection adds a white stroke via the foreground layer.
                 background = ContextCompat.getDrawable(context, bgRes)
@@ -264,20 +267,20 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 addView(
                     ImageView(this@CarPlayerActivity).apply {
                         setImageResource(iconRes)
-                        layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(10) }
+                        layoutParams = LinearLayout.LayoutParams(dp(20), dp(20)).apply { marginEnd = dp(8) }
                     },
                 )
                 addView(
                     TextView(this@CarPlayerActivity).apply {
                         text = label
                         setTextColor(Color.WHITE)
-                        textSize = 15f
+                        textSize = 14f
                     },
                 )
                 setOnClickListener { navTo(id, label) }
             }
             navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(6)
+                bottomMargin = dp(8)
                 marginStart = dp(2)
                 marginEnd = dp(2)
             })
@@ -297,6 +300,13 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                     background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_glass_panel)
                     setPadding(dp(10), dp(4), dp(10), dp(4))
                     addView(titleView, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+                    gridToggle = iconButton(R.drawable.ic_grid_view, 20) { toggleGrid() }
+                    addView(
+                        gridToggle,
+                        FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL).apply {
+                            marginEnd = dp(4)
+                        },
+                    )
                 },
                 LinearLayout.LayoutParams(-1, -2).apply {
                     bottomMargin = dp(10)
@@ -328,7 +338,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             orientation = LinearLayout.HORIZONTAL
             // Deep navy gradient from the mockup reference.
             background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_root)
-            addView(navRail, LinearLayout.LayoutParams(dp(190), -1))
+            addView(navRail, LinearLayout.LayoutParams(dp(178), -1))
             addView(contentPane, LinearLayout.LayoutParams(0, -1, 1f))
         }
 
@@ -569,13 +579,16 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     } catch (_: Throwable) { "RoadPlay" }
 
     /** Uniform icon button: Material vector glyph on a circular glass disc, blue focus glow. */
-    private fun iconButton(iconRes: Int, size: Int = 24, onClick: (View) -> Unit): ImageView =
+    private fun iconButton(iconRes: Int, size: Int = 24, w: Int = 52, h: Int = 48, onClick: (View) -> Unit): ImageView =
         ImageView(this).apply {
             setImageResource(iconRes)
-            layoutParams = LinearLayout.LayoutParams(dp(52), dp(48)).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(w), dp(h)).apply {
                 gravity = Gravity.CENTER_VERTICAL
+                // Breathing room so glass discs never touch or overlap.
+                marginStart = dp(2)
+                marginEnd = dp(2)
             }
-            setPadding(dp((52 - size) / 2 - 4), dp((48 - size) / 2 - 2), dp((52 - size) / 2 - 4), dp((48 - size) / 2 - 2))
+            setPadding(dp((w - size) / 2 - 3), dp((h - size) / 2 - 2), dp((w - size) / 2 - 3), dp((h - size) / 2 - 2))
             isClickable = true
             isFocusable = true
             background = StateListDrawable().apply {
@@ -644,7 +657,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     /** Car screen font scale (set from the phone app). */
-    private var fontScale = 1.15f
+    private var fontScale = 1f
 
     private fun applyTextScale() {
         titleView.textSize = 18f * fontScale
@@ -704,7 +717,16 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 emptyView.text = "Connected — loading library…"
                 c.addListener(this)
                 navTo(MediaIds.RECENT_ROOT, "Home")
-                updateVideoOverlay(c)
+                // Never auto-play on connect — the user decides what plays.
+                main.post {
+                    controller?.let { cc ->
+                        if (cc.isPlaying || cc.playbackState == Player.STATE_BUFFERING) {
+                            cc.pause()
+                            Log.i(TAG, "auto-play suppressed on connect")
+                        }
+                        updateVideoOverlay(cc)
+                    }
+                }
                 main.post(positionRun)
             } catch (t: Throwable) {
                 Log.e(TAG, "connect: FAILED", t)
@@ -1039,6 +1061,15 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
     }
 
+    /** Toggle the library between list rows and a 3-column thumbnail grid. */
+    private fun toggleGrid() {
+        gridMode = !gridMode
+        gridToggle.setImageResource(if (gridMode) R.drawable.ic_menu else R.drawable.ic_grid_view)
+        listHost.layoutManager =
+            if (gridMode) GridLayoutManager(this, 3) else LinearLayoutManager(this)
+        adapter.notifyDataSetChanged()
+    }
+
     private fun highlightNav(label: String) {
         // Unknown labels (folder titles) keep the current selection instead of clearing it.
         if (navButtons.none { it.first == label }) return
@@ -1226,10 +1257,79 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         adapter.notifyDataSetChanged()
     }
 
-    private inner class RowsAdapter : RecyclerView.Adapter<RowHolder>() {
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = RowHolder(makeRow())
+    private inner class RowsAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        override fun getItemViewType(position: Int) = if (gridMode) 1 else 0
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder =
+            if (viewType == 1) GridHolder(makeRowGrid()) else RowHolder(makeRow())
         override fun getItemCount() = rows.size
-        override fun onBindViewHolder(holder: RowHolder, position: Int) = holder.bind(rows[position])
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            when (holder) {
+                is RowHolder -> holder.bind(rows[position])
+                is GridHolder -> holder.bind(rows[position])
+            }
+        }
+    }
+
+    /** Vertical media card for grid mode: thumbnail on top, label beneath. */
+    private fun makeRowGrid(): LinearLayout {
+        val thumb = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = ContextCompat.getDrawable(context, R.drawable.bg_card)
+            clipToOutline = true
+            layoutParams = LinearLayout.LayoutParams(-1, dp(88))
+        }
+        val label = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(8), dp(6), dp(8), dp(8))
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), ContextCompat.getDrawable(context, R.drawable.bg_nav_selected_focus))
+                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_row_card))
+            }
+            layoutParams = GridLayoutManager.LayoutParams(-1, -2).apply {
+                setMargins(dp(4), 0, dp(4), dp(8))
+            }
+            isClickable = true
+            isFocusable = true
+            addView(thumb)
+            addView(label)
+        }
+    }
+
+    private inner class GridHolder(val row: LinearLayout) : RecyclerView.ViewHolder(row) {
+        private val thumb = row.getChildAt(0) as ImageView
+        private val label = row.getChildAt(1) as TextView
+        private lateinit var bound: Row
+
+        init {
+            row.setOnClickListener { open(bound) }
+        }
+
+        fun bind(r: Row) {
+            bound = r
+            label.textSize = 13f * fontScale
+            label.text = r.title
+            val videoId = r.item?.mediaId?.let { MediaIds.parseVideo(it) }
+            if (videoId != null) {
+                thumb.visibility = View.VISIBLE
+                thumb.tag = videoId
+                thumbPool.execute {
+                    val bmp = loadThumb(videoId, r.item)
+                    main.post { if (thumb.tag == videoId) thumb.setImageBitmap(bmp) }
+                }
+            } else {
+                thumb.tag = null
+                thumb.setImageResource(R.drawable.ic_movie)
+                thumb.scaleType = ImageView.ScaleType.CENTER
+                thumb.visibility = View.VISIBLE
+            }
+        }
     }
 
     private fun makeRow(): LinearLayout {
@@ -1328,7 +1428,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private fun loadThumb(videoId: Long, item: MediaItem?): android.graphics.Bitmap? {
         val cache = java.io.File(filesDir, "thumbs/$videoId.jpg")
         if (cache.exists()) return android.graphics.BitmapFactory.decodeFile(cache.absolutePath)
-        val uri = item?.localConfiguration?.uri ?: return null
+        // Browse results arrive without localConfiguration — fall back to the
+        // rp_uri extra the service puts into the metadata.
+        val uri = item?.localConfiguration?.uri
+            ?: item?.mediaMetadata?.extras?.getString("rp_uri")?.let { android.net.Uri.parse(it) }
+            ?: return null
         return try {
             val mmr = android.media.MediaMetadataRetriever()
             mmr.setDataSource(this, uri)

@@ -39,6 +39,11 @@ fun VideoEntity.toMediaItem(): MediaItem =
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_VIDEO)
+                // MediaBrowser browse results drop localConfiguration on the client,
+                // so carry the file URI in metadata extras for thumbnail extraction.
+                .setExtras(
+                    android.os.Bundle().apply { putString("rp_uri", uri.toString()) },
+                )
                 .build()
         )
         .build()

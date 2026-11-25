@@ -16,7 +16,7 @@ data class AppSettings(
     val sortAscending: Boolean = false,
     // Android Auto car screen
     val carControlsHideSeconds: Int = 2,
-    val carFontScale: Float = 1.15f,
+    val carFontScale: Float = 1f,
     val videoWhileDriving: Boolean = true,
     val browserHomeUrl: String = "https://m.youtube.com",
 )
