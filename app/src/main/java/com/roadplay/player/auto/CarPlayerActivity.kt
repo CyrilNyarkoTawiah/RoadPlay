@@ -101,6 +101,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private lateinit var heroCard: LinearLayout
     private lateinit var heroTitle: TextView
     private lateinit var heroMeta: TextView
+    private lateinit var miniThumb: ImageView
+    private var playPauseButton: ImageView? = null
+    private var lastMiniThumbId: Long = -1
+    private var retryFired = false
+    private lateinit var keyboardPane: LinearLayout
 
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
@@ -162,22 +167,27 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         miniBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = ContextCompat.getDrawable(context, R.drawable.bg_mini)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             gravity = Gravity.CENTER_VERTICAL
-            addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(miniPos)
-            addView(controlButton("⏯") { controller?.let { if (it.isPlaying) it.pause() else it.play() } })
             addView(
-                controlButton("↗") { _ ->
-                    controller?.let { m ->
-                        if (MediaIds.parseVideo(m.currentMediaItem?.mediaId ?: "") != null) {
-                            videoExpanded = true
-                            updateVideoOverlay(m)
-                        }
-                    }
+                ImageView(this@CarPlayerActivity).apply { miniThumb = this }.apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = ContextCompat.getDrawable(context, R.drawable.bg_row_card)
+                    clipToOutline = true
+                    layoutParams = LinearLayout.LayoutParams(dp(74), dp(42)).apply { marginEnd = dp(10) }
                 },
             )
-            addView(controlButton("✕") { controller?.stop() })
+            addView(miniTitle, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(miniPos)
+            playPauseButton = iconButton(R.drawable.ic_pause, 24) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
+            addView(playPauseButton)
+            addView(
+                iconButton(R.drawable.ic_open_in_full, 18) { _ ->
+                    videoExpanded = true
+                    controller?.let { updateVideoOverlay(it) }
+                },
+            )
+            addView(iconButton(R.drawable.ic_close, 20) { controller?.stop() })
         }
         // ---- Home hero (Continue Watching) ------------------------------------------------
         heroTitle = TextView(this).apply {
@@ -213,9 +223,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
 
         // ---- Sidebar navigation rail -------------------------------------------------------
-        navRail = LinearLayout(this).apply {
+        navRail = LinearLayout(this@CarPlayerActivity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0C0F16"))
+            setBackgroundColor(Color.parseColor("#070D18"))
             setPadding(dp(10), dp(14), dp(10), dp(10))
             addView(
                 TextView(this@CarPlayerActivity).apply {
@@ -238,24 +248,38 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) },
             )
         }
-        fun navItem(label: String, id: String, selected: Boolean = false) {
-            val item = TextView(this).apply {
-                text = label
-                setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
-                textSize = 15f
-                setPadding(dp(12), dp(14), dp(12), dp(14))
+        fun navItem(label: String, id: String, iconRes: Int, selected: Boolean = false) {
+            val item = LinearLayout(this@CarPlayerActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
                 if (selected) background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
+                isClickable = true
+                isFocusable = true
+                addView(
+                    ImageView(this@CarPlayerActivity).apply {
+                        setImageResource(iconRes)
+                        layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(10) }
+                    },
+                )
+                addView(
+                    TextView(this@CarPlayerActivity).apply {
+                        text = label
+                        setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
+                        textSize = 15f
+                    },
+                )
                 setOnClickListener { navTo(id, label) }
             }
-            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(6) })
+            navRail.addView(item, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
             navButtons.add(label to item)
         }
-        navItem("Home", MediaIds.RECENT_ROOT, selected = true)
-        navItem("All Videos", MediaIds.ALL)
-        navItem("Favourites", MediaIds.FAVOURITES)
-        navItem("Playlists", MediaIds.PLAYLISTS)
-        navItem("🌐 Browser", NAV_BROWSER)
-        navItem("▶ YouTube", NAV_YOUTUBE)
+        navItem("Home", MediaIds.RECENT_ROOT, R.drawable.ic_home, selected = true)
+        navItem("All Videos", MediaIds.ALL, R.drawable.ic_movie)
+        navItem("Favourites", MediaIds.FAVOURITES, R.drawable.ic_star)
+        navItem("Playlists", MediaIds.PLAYLISTS, R.drawable.ic_playlist_play)
+        navItem("🌐 Browser", NAV_BROWSER, R.drawable.ic_public)
+        navItem("▶ YouTube", NAV_YOUTUBE, R.drawable.ic_smart_display)
 
         val contentPane = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -293,9 +317,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         val listPane = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            // Slightly tinted (not pure black): if the unit shows exactly this shade,
-            // the activity renders but its content failed; pitch black means no draw at all.
-            setBackgroundColor(Color.parseColor("#12121A"))
+            // Deep navy gradient from the mockup reference.
+            background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_root)
             addView(navRail, LinearLayout.LayoutParams(dp(190), -1))
             addView(contentPane, LinearLayout.LayoutParams(0, -1, 1f))
         }
@@ -313,15 +336,21 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         topBar = FrameLayout(this).apply {
             background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_glass_panel)
             setPadding(dp(8), dp(4), dp(8), dp(4))
-            addView(videoTitle, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
             addView(
-                controlButton("‹") { collapseVideo() },
+                videoTitle,
+                FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply {
+                    marginStart = dp(120)
+                    marginEnd = dp(120)
+                },
+            )
+            addView(
+                iconButton(R.drawable.ic_arrow_back, 22) { collapseVideo() },
                 FrameLayout.LayoutParams(-2, -2, Gravity.START or Gravity.CENTER_VERTICAL).apply {
                     marginStart = dp(10)
                 },
             )
             addView(
-                controlButton("✕") { collapseVideo() },
+                iconButton(R.drawable.ic_close, 20) { collapseVideo() },
                 FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.CENTER_VERTICAL).apply {
                     marginEnd = dp(10)
                 },
@@ -364,11 +393,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setPadding(dp(12), dp(4), dp(12), dp(10))
             gravity = Gravity.CENTER
             // equal-weight buttons so nothing ever overlaps
-            addButton("⏮") { controller?.seekToPreviousMediaItem() }
-            addButton("⏪") { controller?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
-            addButton("⏯") { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
-            addButton("⏩") { controller?.let { it.seekTo(it.currentPosition + 10_000) } }
-            addButton("⏭") { controller?.seekToNextMediaItem() }
+            addButton(R.drawable.ic_skip_previous) { controller?.seekToPreviousMediaItem() }
+            addButton(R.drawable.ic_replay_10) { controller?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
+            addButton(R.drawable.ic_play_arrow, emphasized = true) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
+            addButton(R.drawable.ic_forward_10) { controller?.let { it.seekTo(it.currentPosition + 10_000) } }
+            addButton(R.drawable.ic_skip_next) { controller?.seekToNextMediaItem() }
         }
 
         val bottomControls = LinearLayout(this@CarPlayerActivity).apply {
@@ -422,11 +451,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setBackgroundColor(Color.argb(160, 0, 0, 0))
             setPadding(dp(10), dp(6), dp(10), dp(6))
             gravity = Gravity.CENTER_VERTICAL
-            addView(controlButton("‹") { if (webView.canGoBack()) webView.goBack() else closeBrowser() })
+            addView(iconButton(R.drawable.ic_arrow_back, 22) { if (webView.canGoBack()) webView.goBack() else closeBrowser() })
             addView(urlBar, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(controlButton("⌂") { openUrl(browserHome) })
-            addView(controlButton("⟳") { webView.reload() })
-            addView(controlButton("✕") { closeBrowser() })
+            addView(iconButton(R.drawable.ic_home, 20) { openUrl(browserHome) })
+            addView(iconButton(R.drawable.ic_refresh, 20) { webView.reload() })
+            addView(iconButton(R.drawable.ic_close, 20) { closeBrowser() })
+            addView(iconButton(R.drawable.ic_playlist_play, 20) { toggleKeyboard() })
         }
         webStatus = TextView(this).apply {
             setTextColor(Color.LTGRAY)
@@ -440,7 +470,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
             settings.loadsImagesAutomatically = true
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
@@ -458,6 +488,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                         Log.e(TAG, "web error: ${error.description}")
                         webStatus.text = "Load error: ${error.description}"
                         webStatus.visibility = View.VISIBLE
+                        // POST-replay quirk: one automatic retry usually clears it.
+                        if ((error.description ?: "").contains("CACHE_MISS", ignoreCase = true) && !retryFired) {
+                            retryFired = true
+                            view.reload()
+                        }
                     }
                 }
 
@@ -490,6 +525,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(urlPane, LinearLayout.LayoutParams(-1, -2))
             addView(webStatus, LinearLayout.LayoutParams(-1, -2))
             addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(buildKeyboard(), LinearLayout.LayoutParams(-1, -2))
         }
 
         val root = FrameLayout(this).apply {
@@ -507,16 +543,14 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         "RoadPlay v" + packageManager.getPackageInfo(packageName, 0).versionName
     } catch (_: Throwable) { "RoadPlay" }
 
-    /** Uniform control chip: circular glass button with a blue focus/press glow. */
-    private fun controlButton(glyph: String, onClick: (View) -> Unit): TextView =
-        TextView(this).apply {
-            text = glyph
-            setTextColor(Color.WHITE)
-            textSize = 20f
-            gravity = Gravity.CENTER
-            minWidth = dp(56)
-            minHeight = dp(48)
-            setPadding(dp(10), 0, dp(10), 0)
+    /** Uniform icon button: Material vector glyph on a circular glass disc, blue focus glow. */
+    private fun iconButton(iconRes: Int, size: Int = 24, onClick: (View) -> Unit): ImageView =
+        ImageView(this).apply {
+            setImageResource(iconRes)
+            layoutParams = LinearLayout.LayoutParams(dp(52), dp(48)).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            setPadding(dp((52 - size) / 2 - 4), dp((48 - size) / 2 - 2), dp((52 - size) / 2 - 4), dp((48 - size) / 2 - 2))
             isClickable = true
             isFocusable = true
             background = StateListDrawable().apply {
@@ -533,9 +567,38 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setOnClickListener(onClick)
         }
 
-    private fun LinearLayout.addButton(glyph: String, onClick: () -> Unit) {
-        addView(controlButton(glyph) { onClick(); scheduleHide() },
-            LinearLayout.LayoutParams(0, -2, 1f))
+    /** Big round accent play/pause button for the video controls row. */
+    private fun playButton(iconRes: Int, onClick: () -> Unit): ImageView =
+        ImageView(this).apply {
+            setImageResource(iconRes)
+            layoutParams = LinearLayout.LayoutParams(dp(72), dp(60)).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                marginStart = dp(10)
+                marginEnd = dp(10)
+            }
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            isClickable = true
+            isFocusable = true
+            background = StateListDrawable().apply {
+                addState(
+                    intArrayOf(android.R.attr.state_pressed),
+                    ContextCompat.getDrawable(context, R.drawable.bg_glass_btn_focus),
+                )
+                addState(
+                    intArrayOf(android.R.attr.state_focused),
+                    ContextCompat.getDrawable(context, R.drawable.bg_glass_btn_focus),
+                )
+                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_nav_selected))
+            }
+            setOnClickListener { onClick(); scheduleHide() }
+        }
+
+    private fun LinearLayout.addButton(iconRes: Int, emphasized: Boolean = false, onClick: () -> Unit) {
+        val btn = if (emphasized) playButton(iconRes) { onClick() } else iconButton(iconRes, 26) { onClick(); scheduleHide() }
+        if (emphasized) {
+            playPauseButton = btn
+        }
+        addView(btn)
     }
 
     // ---- Settings -------------------------------------------------------------------------
@@ -689,7 +752,94 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     // ---- Built-in browser -----------------------------------------------------------------
 
+    /** On-screen keyboard for the car screen (the AA host never shows the system IME). */
+    private fun buildKeyboard(): LinearLayout {
+        fun key(label: String, widthDp: Int = 50): TextView = TextView(this).apply {
+            text = label
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            gravity = Gravity.CENTER
+            background = ContextCompat.getDrawable(context, R.drawable.bg_row_card)
+            layoutParams = LinearLayout.LayoutParams(dp(widthDp), dp(46)).apply {
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val start = urlBar.selectionStart.coerceIn(0, urlBar.text.length)
+                urlBar.text.insert(start, label)
+                urlBar.setSelection(start + label.length)
+                scheduleHide()
+            }
+        }
+        val pane = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_mini)
+            setPadding(dp(8), dp(6), dp(8), dp(10))
+            visibility = View.GONE
+        }
+        val rows = listOf("1234567890", "qwertyuiop", "asdfghjkl:", "zxcvbnm.-/")
+        for (r in rows) {
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER }
+            for (ch in r) row.addView(key(ch.toString()))
+            pane.addView(row, LinearLayout.LayoutParams(-1, -2))
+        }
+        val lastRow = LinearLayout(this).apply { gravity = Gravity.CENTER }
+        val backKey = TextView(this).apply {
+            text = "⌫"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            gravity = Gravity.CENTER
+            background = ContextCompat.getDrawable(context, R.drawable.bg_row_card)
+            layoutParams = LinearLayout.LayoutParams(dp(70), dp(46)).apply {
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val start = urlBar.selectionStart
+                if (start > 0 && urlBar.text.isNotEmpty()) {
+                    urlBar.text.delete(start - 1, start)
+                    urlBar.setSelection(start - 1)
+                }
+                scheduleHide()
+            }
+        }
+        val spaceKey = key("space", 150).apply { text = "" }
+        val dotComKey = key(".com", 70)
+        val goKey = TextView(this).apply {
+            text = "GO"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            gravity = Gravity.CENTER
+            background = ContextCompat.getDrawable(context, R.drawable.bg_nav_selected)
+            layoutParams = LinearLayout.LayoutParams(dp(70), dp(46)).apply {
+                setMargins(dp(3), dp(3), dp(3), dp(3))
+            }
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { openUrl(urlBar.text.toString()); hideKeyboard() }
+        }
+        lastRow.addView(backKey)
+        lastRow.addView(spaceKey)
+        lastRow.addView(dotComKey)
+        lastRow.addView(goKey)
+        pane.addView(lastRow, LinearLayout.LayoutParams(-1, -2))
+        keyboardPane = pane
+        return pane
+    }
+
+    private fun toggleKeyboard() {
+        keyboardPane.visibility =
+            if (keyboardPane.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    }
+
+    private fun hideKeyboard() {
+        keyboardPane.visibility = View.GONE
+    }
+
     private fun openBrowser(url: String) {
+        retryFired = false
         webViewPane.visibility = View.VISIBLE
         listHost.visibility = View.GONE
         emptyView.visibility = View.GONE
@@ -714,6 +864,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private fun closeBrowser() {
         webView.onPause()
+        hideKeyboard()
         webViewPane.visibility = View.GONE
         titleView.visibility = View.VISIBLE
         listHost.visibility = View.VISIBLE
@@ -795,7 +946,9 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             val selected = name == label
             view.background =
                 if (selected) ContextCompat.getDrawable(this, R.drawable.bg_nav_selected) else null
-            view.setTextColor(if (selected) Color.WHITE else Color.parseColor("#C7CDD8"))
+            (view.getChildAt(1) as TextView).setTextColor(
+                if (selected) Color.WHITE else Color.parseColor("#C7CDD8"),
+            )
         }
     }
 
@@ -863,6 +1016,21 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             if (miniBar.visibility == View.VISIBLE) {
                 miniPos.text = "${fmt(c.currentPosition)} / ${fmt(dur)}"
+                val cur = c.currentMediaItem?.mediaId
+                val vid = cur?.let { MediaIds.parseVideo(it) }
+                if (vid != null && vid != lastMiniThumbId) {
+                    lastMiniThumbId = vid
+                    val item = c.currentMediaItem
+                    thumbPool.execute {
+                        val bmp = loadThumb(vid, item)
+                        main.post { if (lastMiniThumbId == vid) miniThumb.setImageBitmap(bmp) }
+                    }
+                }
+            }
+            val pp = playPauseButton
+            if (pp != null) {
+                val want = if (c.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
+                if (pp.tag != want) { pp.tag = want; pp.setImageResource(want) }
             }
             main.postDelayed(this, 500)
         }
@@ -1045,10 +1213,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 icon.visibility = View.VISIBLE
                 icon.setImageResource(
                     when (r.kind) {
-                        Row.Kind.BROWSER -> android.R.drawable.ic_menu_compass
-                        Row.Kind.YOUTUBE -> android.R.drawable.ic_media_play
-                        Row.Kind.FOLDER, Row.Kind.BACK -> android.R.drawable.ic_menu_agenda
-                        else -> android.R.drawable.ic_media_play
+                        Row.Kind.BROWSER -> R.drawable.ic_public
+                        Row.Kind.YOUTUBE -> R.drawable.ic_smart_display
+                        Row.Kind.FOLDER -> R.drawable.ic_folder
+                        Row.Kind.BACK -> R.drawable.ic_arrow_back
+                        else -> R.drawable.ic_play_arrow
                     },
                 )
             }
