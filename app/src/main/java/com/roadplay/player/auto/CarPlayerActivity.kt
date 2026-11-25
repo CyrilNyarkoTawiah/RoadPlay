@@ -472,7 +472,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         videoOverlay.visibility = if (showVideo) View.VISIBLE else View.GONE
         if (showVideo) {
             showControls()
-            surface?.let { if (!surfaceSent) sendCarSurface(it) }
+            surface?.let { if (!surfaceSent) sendCarSurface(c) }
         } else if (surfaceSent) {
             clearCarSurface(c)
         }
