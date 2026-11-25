@@ -422,7 +422,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addButton(R.drawable.ic_replay_10) { controller?.let { it.seekTo((it.currentPosition - 10_000).coerceAtLeast(0)) } }
             addButton(R.drawable.ic_play_arrow, emphasized = true) { controller?.let { if (it.isPlaying) it.pause() else it.play() } }
             addButton(R.drawable.ic_forward_10) { controller?.let { it.seekTo(it.currentPosition + 10_000) } }
-            addButton(R.drawable.ic_aspect_ratio, 22) { cycleAspect() }
+            addButton(R.drawable.ic_aspect_ratio) { cycleAspect() }
             addButton(R.drawable.ic_skip_next) { controller?.seekToNextMediaItem() }
         }
 
@@ -456,7 +456,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                     bottomMargin = dp(14)
                 },
             )
-            aspectToast = TextView(this).apply {
+            aspectToast = TextView(this@CarPlayerActivity).apply {
                 setTextColor(Color.WHITE)
                 textSize = 13f
                 background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_mini)
@@ -570,30 +570,11 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 // HTML5 video fullscreen (YouTube's fullscreen button) — swap the custom
                 // fullscreen view into the pane and restore the page when it closes.
                 override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
-                    if (customView != null) {
-                        callback.onCustomViewHidden()
-                        return
-                    }
-                    Log.i(TAG, "web fullscreen enter")
-                    customView = view
-                    customViewCallback = callback
-                    webView.visibility = View.GONE
-                    urlPane.visibility = View.GONE
-                    webStatus.visibility = View.GONE
-                    webViewPane.addView(
-                        view,
-                        LinearLayout.LayoutParams(-1, 0, 1f),
-                    )
+                    this@CarPlayerActivity.enterWebFullscreen(view, callback)
                 }
 
                 override fun onHideCustomView() {
-                    Log.i(TAG, "web fullscreen exit")
-                    customView?.let { webViewPane.removeView(it) }
-                    customView = null
-                    webView.visibility = View.VISIBLE
-                    urlPane.visibility = View.VISIBLE
-                    customViewCallback?.onCustomViewHidden()
-                    customViewCallback = null
+                    this@CarPlayerActivity.exitWebFullscreen()
                 }
             }
             setBackgroundColor(Color.BLACK)
@@ -1309,6 +1290,31 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         aspectToast.visibility = View.VISIBLE
         main.removeCallbacks(aspectToastHide)
         main.postDelayed(aspectToastHide, 1600)
+    }
+
+    /** HTML5 fullscreen state, driven by the WebChromeClient and the BACK key. */
+    private fun enterWebFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {
+        if (customView != null) {
+            callback.onCustomViewHidden()
+            return
+        }
+        Log.i(TAG, "web fullscreen enter")
+        customView = view
+        customViewCallback = callback
+        webView.visibility = View.GONE
+        urlPane.visibility = View.GONE
+        webStatus.visibility = View.GONE
+        webViewPane.addView(view, LinearLayout.LayoutParams(-1, 0, 1f))
+    }
+
+    fun exitWebFullscreen() {
+        Log.i(TAG, "web fullscreen exit")
+        customView?.let { webViewPane.removeView(it) }
+        customView = null
+        webView.visibility = View.VISIBLE
+        urlPane.visibility = View.VISIBLE
+        customViewCallback?.onCustomViewHidden()
+        customViewCallback = null
     }
 
     private val aspectToastHide = Runnable {
