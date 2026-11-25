@@ -218,7 +218,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             setBackgroundColor(Color.parseColor("#0C0F16"))
             setPadding(dp(10), dp(14), dp(10), dp(10))
             addView(
-                TextView(this).apply {
+                TextView(this@CarPlayerActivity).apply {
                     text = "▶ RoadPlay"
                     setTextColor(Color.parseColor("#4FC3F7"))
                     textSize = 17f
@@ -226,7 +226,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 },
             )
             addView(
-                TextView(this).apply {
+                TextView(this@CarPlayerActivity).apply {
                     text = "Your Media, On the Road"
                     setTextColor(Color.parseColor("#9AA5B1"))
                     textSize = 10f
@@ -234,7 +234,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 },
             )
             addView(
-                View(this).apply { setBackgroundColor(Color.parseColor("#262B36")) },
+                View(this@CarPlayerActivity).apply { setBackgroundColor(Color.parseColor("#262B36")) },
                 LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) },
             )
         }
