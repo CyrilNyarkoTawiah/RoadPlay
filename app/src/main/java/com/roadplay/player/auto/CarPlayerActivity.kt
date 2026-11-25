@@ -107,6 +107,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private var lastMiniThumbId: Long = -1
     private var retryFired = false
     private lateinit var keyboardPane: LinearLayout
+    private lateinit var urlPane: LinearLayout
     private var keyboardToWebView = false
     private var customView: View? = null
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
@@ -483,7 +484,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 if (action == EditorInfo.IME_ACTION_GO) { openUrl(text.toString()); true } else false
             }
         }
-        val urlPane = LinearLayout(this).apply {
+        urlPane = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.argb(160, 0, 0, 0))
             setPadding(dp(10), dp(6), dp(10), dp(6))
@@ -1339,7 +1340,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         if (webViewPane.visibility == View.VISIBLE && keyCode == KeyEvent.KEYCODE_BACK) {
             if (customView != null) {
-                onHideCustomView()
+                exitWebFullscreen()
                 return true
             }
             if (webView.canGoBack()) webView.goBack() else closeBrowser()
