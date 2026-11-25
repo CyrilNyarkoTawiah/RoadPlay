@@ -5,6 +5,7 @@ package com.roadplay.player.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import android.os.Process
 import android.util.Log
 import android.view.Surface
 import androidx.core.os.BundleCompat
@@ -179,8 +180,15 @@ class PlaybackService : MediaLibraryService() {
             .build()
     }
 
-    private fun isCarController(session: MediaSession, controller: MediaSession.ControllerInfo): Boolean =
-        session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)
+    private fun isCarController(session: MediaSession, controller: MediaSession.ControllerInfo): Boolean {
+        // Our own CarPlayerActivity connects through the car session too — but it renders
+        // video on its own SurfaceView, so it must NOT be treated as audio-only. Only the
+        // AA host's controllers (gearhead) get the audio-only media template.
+        val self = controller.uid == Process.myUid()
+        val auto = session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)
+        Log.i(TAG, "isCarController: ${controller.packageName} uid=${controller.uid} self=$self auto=$auto")
+        return auto && !self
+    }
 
     private fun eligible(list: List<VideoEntity>) = list.filter { it.isAvailable && it.hasAudio }
 
@@ -189,7 +197,7 @@ class PlaybackService : MediaLibraryService() {
         val playlists = container.database.playlistDao()
         return when {
             parentId == MediaIds.ROOT -> listOf(
-                folderItem(MediaIds.ALL, "All videos (audio only)"),
+                folderItem(MediaIds.ALL, "All videos"),
                 folderItem(MediaIds.FAVOURITES, "Favourites"),
                 folderItem(MediaIds.RECENT, "Recently played"),
                 folderItem(MediaIds.PLAYLISTS, "Playlists"),
@@ -319,7 +327,9 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>,
         ): ListenableFuture<MutableList<MediaItem>> = scope.future {
-            applyVideoPolicy(audioOnly = isCarController(mediaSession, controller))
+            val audioOnly = isCarController(mediaSession, controller)
+            Log.i(TAG, "onAddMediaItems from=${controller.packageName} uid=${controller.uid} audioOnly=$audioOnly")
+            applyVideoPolicy(audioOnly = audioOnly)
             mediaItems.map { resolve(it) }.toMutableList()
         }
 

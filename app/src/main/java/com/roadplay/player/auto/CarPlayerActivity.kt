@@ -18,6 +18,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
@@ -84,6 +87,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private lateinit var webViewPane: LinearLayout
     private lateinit var webView: WebView
     private lateinit var urlBar: EditText
+    private lateinit var webStatus: TextView
 
     /** Back stack of (title, parentId); last = currently shown. */
     private val trail = ArrayDeque<Pair<String, String>>()
@@ -234,21 +238,53 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             addView(controlButton("⌂") { openUrl(browserHome) })
             addView(controlButton("⟳") { webView.reload() })
         }
+        webStatus = TextView(this).apply {
+            setTextColor(Color.LTGRAY)
+            textSize = 12f
+            setPadding(dp(12), dp(2), dp(12), dp(2))
+            visibility = View.GONE
+        }
         @SuppressLint("SetJavaScriptEnabled")
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
-            webViewClient = WebViewClient()
-            webChromeClient = WebChromeClient()
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.userAgentString =
+                "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                    "Chrome/124.0.0.0 Mobile Safari/537.36"
+            webViewClient = object : WebViewClient() {
+                override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                    if (request.isForMainFrame) {
+                        Log.e(TAG, "web error: ${error.description}")
+                        webStatus.text = "Load error: ${error.description}"
+                        webStatus.visibility = View.VISIBLE
+                    }
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    webStatus.visibility = View.GONE
+                    urlBar.setText(url)
+                }
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    if (newProgress < 100) {
+                        webStatus.text = "Loading $newProgress%…"
+                        webStatus.visibility = View.VISIBLE
+                    } else webStatus.visibility = View.GONE
+                }
+            }
             setBackgroundColor(Color.BLACK)
             setOnTouchListener { v, ev -> scheduleHide(); v.performClick(); false }
         }
+        WebView.setWebContentsDebuggingEnabled(true)
         webViewPane = LinearLayout(this).apply {
             setBackgroundColor(Color.BLACK)
             visibility = View.GONE
             orientation = LinearLayout.VERTICAL
             addView(urlPane, LinearLayout.LayoutParams(-1, -2))
+            addView(webStatus, LinearLayout.LayoutParams(-1, -2))
             addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
         }
 
@@ -260,8 +296,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         setContentView(root)
         listHost.adapter = adapter
-        trail.addLast("RoadPlay" to MediaIds.ROOT)
+        trail.addLast(rootTitle() to MediaIds.ROOT)
     }
+
+    private fun rootTitle(): String = try {
+        "RoadPlay v" + packageManager.getPackageInfo(packageName, 0).versionName
+    } catch (_: Throwable) { "RoadPlay" }
 
     /** Uniform control chip: fixed square, centred glyph, ripple-ish focus state. */
     private fun controlButton(glyph: String, onClick: (View) -> Unit): TextView =
@@ -391,8 +431,6 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                     rows.add(Row("▶ YouTube", null, Row.Kind.YOUTUBE))
                 }
                 titleView.text = title
-                trail.removeLastOrNull()
-                trail.addLast(title to parentId)
                 if (rows.isEmpty()) emptyView.text = "No items in $title"
                 emptyView.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
                 listHost.visibility = if (rows.isEmpty()) View.GONE else View.VISIBLE
@@ -416,7 +454,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             }
             row.kind == Row.Kind.BROWSER -> openBrowser(browserHome)
             row.kind == Row.Kind.YOUTUBE -> openBrowser("https://m.youtube.com")
-            row.kind == Row.Kind.FOLDER -> row.item?.mediaId?.let { show(it, row.title) }
+            row.kind == Row.Kind.FOLDER -> row.item?.mediaId?.let {
+                trail.addLast(row.title to it)
+                show(it, row.title)
+            }
             else -> controller?.let { c ->
                 row.item?.let {
                     c.setMediaItem(it)
@@ -488,6 +529,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             surface?.let { if (!surfaceSent) sendCarSurface(c) }
         } else if (surfaceSent) {
             clearCarSurface(c)
+        }
+        // Audio-only fallback: keep the list visible and say why there is no picture.
+        if (c.isPlaying && !showVideo) {
+            emptyView.text = "Playing audio only — no video stream on this screen"
+            emptyView.visibility = View.VISIBLE
+            listHost.visibility = View.VISIBLE
         }
     }
 
@@ -670,8 +717,8 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
             label.text = r.title
             icon.setImageResource(
                 when (r.kind) {
-                    Row.Kind.BROWSER -> android.R.drawable.ic_menu_manage
-                    Row.Kind.YOUTUBE -> android.R.drawable.ic_menu_upload
+                    Row.Kind.BROWSER -> android.R.drawable.ic_menu_compass
+                    Row.Kind.YOUTUBE -> android.R.drawable.ic_media_play
                     Row.Kind.FOLDER, Row.Kind.BACK -> android.R.drawable.ic_menu_agenda
                     else -> android.R.drawable.ic_media_play
                 },
