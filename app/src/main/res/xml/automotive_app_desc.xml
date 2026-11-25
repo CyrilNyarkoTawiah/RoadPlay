@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <automotiveApp>
     <uses name="media" />
+    <!-- Tells the AA host this app also carries a projection CarActivity
+         (auto/CarPlayerService). Without "projection" the host registers
+         media-only and never shows the car screen. -->
+    <uses name="service" />
+    <uses name="projection" />
 </automotiveApp>
