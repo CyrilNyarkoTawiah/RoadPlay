@@ -110,7 +110,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
     private var homeNav = false
-    private val navButtons = mutableListOf<Pair<String, TextView>>()
+    private val navButtons = mutableListOf<Pair<String, LinearLayout>>()
     private var heroRow: Row? = null
     private val thumbPool: java.util.concurrent.Executor = java.util.concurrent.Executors.newFixedThreadPool(2)
 
