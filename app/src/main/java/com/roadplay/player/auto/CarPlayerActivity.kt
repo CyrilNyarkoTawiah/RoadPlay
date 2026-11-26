@@ -128,15 +128,15 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
     private val carThemes = listOf(
         // Navy — the mockup reference (default).
-        CarTheme("navy", 0xFF1C3257, 0xFF152845, 0xFF0E1B31, 0xFF070D18, 0xB3243757, 0xFF24466E, 0xFF142A48),
+        CarTheme("navy", 0xFF1C3257.toInt(), 0xFF152845.toInt(), 0xFF0E1B31.toInt(), 0xFF070D18.toInt(), 0xB3243757.toInt(), 0xFF24466E.toInt(), 0xFF142A48.toInt()),
         // Carbon — neutral graphite, OLED-friendly.
-        CarTheme("carbon", 0xFF1B1D23, 0xFF13151A, 0xFF0B0D11, 0xFF0A0C10, 0xB32C3038, 0xFF2A2E38, 0xFF15171D),
+        CarTheme("carbon", 0xFF1B1D23.toInt(), 0xFF13151A.toInt(), 0xFF0B0D11.toInt(), 0xFF0A0C10.toInt(), 0xB32C3038.toInt(), 0xFF2A2E38.toInt(), 0xFF15171D.toInt()),
         // Slate — cool steel blue, a touch lighter.
-        CarTheme("slate", 0xFF2C3A52, 0xFF212C40, 0xFF141C2A, 0xFF0C1320, 0xB330405A, 0xFF365074, 0xFF1C2A40),
+        CarTheme("slate", 0xFF2C3A52.toInt(), 0xFF212C40.toInt(), 0xFF141C2A.toInt(), 0xFF0C1320.toInt(), 0xB330405A.toInt(), 0xFF365074.toInt(), 0xFF1C2A40.toInt()),
         // Emerald — deep green.
-        CarTheme("emerald", 0xFF17453A, 0xFF103028, 0xFF091E19, 0xFF071611, 0xB3205042, 0xFF1D5D4C, 0xFF0D2C23),
+        CarTheme("emerald", 0xFF17453A.toInt(), 0xFF103028.toInt(), 0xFF091E19.toInt(), 0xFF071611.toInt(), 0xB3205042.toInt(), 0xFF1D5D4C.toInt(), 0xFF0D2C23.toInt()),
         // Wine — deep burgundy.
-        CarTheme("wine", 0xFF451F33, 0xFF301624, 0xFF1D0D16, 0xFF140A10, 0xB3502C40, 0xFF552A40, 0xFF251020),
+        CarTheme("wine", 0xFF451F33.toInt(), 0xFF301624.toInt(), 0xFF1D0D16.toInt(), 0xFF140A10.toInt(), 0xB3502C40.toInt(), 0xFF552A40.toInt(), 0xFF251020.toInt()),
     )
     private var appTheme = "navy"
     private var appliedTheme: String? = null
