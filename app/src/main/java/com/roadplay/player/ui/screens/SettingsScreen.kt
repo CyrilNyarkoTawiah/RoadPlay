@@ -79,6 +79,14 @@ fun SettingsScreen(
         Slider(value = s.subtitleScale, onValueChange = vm::setSubtitleScale, valueRange = 0.75f..1.75f, modifier = Modifier.padding(horizontal = 16.dp))
 
         SectionHeader("Android Auto (car screen)")
+        Text("Car screen theme", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
+        Text("Applies next time the car screen connects", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
+        ChipRow {
+            listOf("navy", "carbon", "slate", "emerald", "wine").forEach { key ->
+                FilterChip(selected = s.carTheme == key, onClick = { vm.setCarTheme(key) },
+                    label = { Text(key.replaceFirstChar { it.uppercase() }) })
+            }
+        }
         Text("Car screen text size", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium)
         Text("Now: ${(s.carFontScale * 100).toInt()}%", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
         Slider(

@@ -35,6 +35,7 @@ class SettingsViewModel(
     fun setSort(f: SortField, asc: Boolean) { viewModelScope.launch { repo.setSort(f, asc) } }
     fun setCarControlsHideSeconds(s: Int) { viewModelScope.launch { repo.setCarControlsHideSeconds(s) } }
     fun setCarFontScale(f: Float) { viewModelScope.launch { repo.setCarFontScale(f) } }
+    fun setCarTheme(theme: String) { viewModelScope.launch { repo.setCarTheme(theme) } }
     fun setVideoWhileDriving(b: Boolean) { viewModelScope.launch { repo.setVideoWhileDriving(b) } }
     fun setBrowserHomeUrl(url: String) { viewModelScope.launch { repo.setBrowserHomeUrl(url) } }
 

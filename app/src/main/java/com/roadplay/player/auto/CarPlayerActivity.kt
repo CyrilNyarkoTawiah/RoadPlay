@@ -118,6 +118,67 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private var everStarted = false
     private var everConnected = false
 
+    // ---- Car screen themes (phone Settings → "Car screen theme") --------------------------
+    private data class CarTheme(
+        val key: String,
+        val rootTop: Int, val rootMid: Int, val rootBottom: Int,
+        val rail: Int, val rowFill: Int,
+        val heroTop: Int, val heroBottom: Int,
+    )
+
+    private val carThemes = listOf(
+        // Navy — the mockup reference (default).
+        CarTheme("navy", 0xFF1C3257, 0xFF152845, 0xFF0E1B31, 0xFF070D18, 0xB3243757, 0xFF24466E, 0xFF142A48),
+        // Carbon — neutral graphite, OLED-friendly.
+        CarTheme("carbon", 0xFF1B1D23, 0xFF13151A, 0xFF0B0D11, 0xFF0A0C10, 0xB32C3038, 0xFF2A2E38, 0xFF15171D),
+        // Slate — cool steel blue, a touch lighter.
+        CarTheme("slate", 0xFF2C3A52, 0xFF212C40, 0xFF141C2A, 0xFF0C1320, 0xB330405A, 0xFF365074, 0xFF1C2A40),
+        // Emerald — deep green.
+        CarTheme("emerald", 0xFF17453A, 0xFF103028, 0xFF091E19, 0xFF071611, 0xB3205042, 0xFF1D5D4C, 0xFF0D2C23),
+        // Wine — deep burgundy.
+        CarTheme("wine", 0xFF451F33, 0xFF301624, 0xFF1D0D16, 0xFF140A10, 0xB3502C40, 0xFF552A40, 0xFF251020),
+    )
+    private var appTheme = "navy"
+    private var appliedTheme: String? = null
+
+    private fun carTheme(): CarTheme = carThemes.firstOrNull { it.key == appTheme } ?: carThemes[0]
+
+    private fun rootGradient(t: CarTheme): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.BL_TR, intArrayOf(t.rootTop, t.rootMid, t.rootBottom))
+
+    private fun heroGradient(t: CarTheme): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.BL_TR, intArrayOf(t.heroTop, t.heroBottom)).apply {
+            setStroke(dp(1), 0x33FFFFFF.toInt())
+            cornerRadius = dpf(16f)
+        }
+
+    /** Themed row/grid card: rounded glass fill + hairline, blue focus glow on top. */
+    private fun rowBackground(): StateListDrawable = StateListDrawable().apply {
+        addState(
+            intArrayOf(android.R.attr.state_focused),
+            ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_nav_selected_focus),
+        )
+        addState(
+            intArrayOf(),
+            GradientDrawable().apply {
+                setColor(carTheme().rowFill)
+                setStroke(dp(1), 0x26FFFFFF.toInt())
+                cornerRadius = dpf(14f)
+            },
+        )
+    }
+
+    private fun applyTheme() {
+        if (!::rootPane.isInitialized || !::heroCard.isInitialized || !::navRail.isInitialized || !::adapter.isInitialized) return
+        val t = carTheme()
+        rootPane.background = rootGradient(t)
+        navRail.setBackgroundColor(t.rail)
+        heroCard.background = heroGradient(t)
+        adapter.notifyDataSetChanged()
+        appliedTheme = appTheme
+        Log.i(TAG, "theme applied: ${t.key}")
+    }
+
     /** False = browse the library (mini player); true = fullscreen video overlay. */
     private var videoExpanded = false
     private var homeNav = false
@@ -129,6 +190,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     private val trail = ArrayDeque<Pair<String, String>>()
     private val rows = mutableListOf<Row>()
     private lateinit var adapter: RowsAdapter
+    private lateinit var rootPane: LinearLayout
 
     private class Row(val title: String, val item: MediaItem?, val kind: Kind) {
         enum class Kind { FOLDER, VIDEO, BACK, BROWSER, YOUTUBE }
@@ -343,11 +405,12 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         val listPane = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            // Deep navy gradient from the mockup reference.
+            // Deep navy gradient from the mockup reference (themed at runtime).
             background = ContextCompat.getDrawable(this@CarPlayerActivity, R.drawable.bg_root)
             addView(navRail, LinearLayout.LayoutParams(dp(178), -1))
             addView(contentPane, LinearLayout.LayoutParams(0, -1, 1f))
         }
+        rootPane = listPane
 
         // ---- video layer ----------------------------------------------------------------
         videoSurfaceView = SurfaceView(this)
@@ -677,8 +740,10 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
                 hideSeconds = s.carControlsHideSeconds.coerceIn(1, 10)
                 browserHome = s.browserHomeUrl
                 fontScale = s.carFontScale.coerceIn(0.8f, 1.6f)
+                appTheme = s.carTheme
+                if (appTheme != appliedTheme) applyTheme()
                 applyTextScale()
-                Log.i(TAG, "settings: hide=${hideSeconds}s home=$browserHome font=$fontScale")
+                Log.i(TAG, "settings: hide=${hideSeconds}s home=$browserHome font=$fontScale theme=$appTheme")
             } catch (t: Throwable) {
                 Log.e(TAG, "settings load failed", t)
             }
@@ -1410,10 +1475,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_focused), ContextCompat.getDrawable(context, R.drawable.bg_nav_selected_focus))
-                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_row_card))
-            }
+            background = rowBackground()
             layoutParams = GridLayoutManager.LayoutParams(-1, -2).apply {
                 setMargins(dp(4), 0, dp(4), dp(8))
             }
@@ -1435,6 +1497,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
         fun bind(r: Row) {
             bound = r
+            row.background = rowBackground()
             label.textSize = 13f * fontScale
             label.text = r.title
             val videoId = r.item?.mediaId?.let { MediaIds.parseVideo(it) }
@@ -1483,10 +1546,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             // Card-style rows: rounded card + inner padding, spaced by RecyclerView margins.
-            background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_focused), ContextCompat.getDrawable(context, R.drawable.bg_nav_selected_focus))
-                addState(intArrayOf(), ContextCompat.getDrawable(context, R.drawable.bg_row_card))
-            }
+            background = rowBackground()
             layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
                 setMargins(dp(0), 0, dp(0), dp(6))
             }
@@ -1512,6 +1572,7 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
 
         fun bind(r: Row) {
             bound = r
+            row.background = rowBackground()
             label.textSize = 15f * fontScale
             label.text = r.title
             val videoId = r.item?.mediaId?.let { MediaIds.parseVideo(it) }
@@ -1574,4 +1635,5 @@ class CarPlayerActivity : CarActivity(), Player.Listener {
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dpf(v: Float) = v * resources.displayMetrics.density
 }

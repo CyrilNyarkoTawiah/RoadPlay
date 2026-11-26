@@ -16,6 +16,9 @@ import java.io.IOException
 
 private val Context.settingsStore by preferencesDataStore(name = "roadplay_settings")
 
+/** Valid car-screen theme keys (mirrored by the palette table in CarPlayerActivity). */
+val CAR_THEME_KEYS = setOf("navy", "carbon", "slate", "emerald", "wine")
+
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val THEME = stringPreferencesKey("theme")
@@ -27,6 +30,7 @@ class SettingsRepository(private val context: Context) {
         val SORT_ASC = booleanPreferencesKey("sort_ascending")
         val CAR_HIDE_SECONDS = intPreferencesKey("car_controls_hide_seconds")
         val CAR_FONT_SCALE = floatPreferencesKey("car_font_scale")
+        val CAR_THEME = stringPreferencesKey("car_theme")
         val CAR_DRIVE_VIDEO = booleanPreferencesKey("car_video_while_driving")
         val BROWSER_HOME = stringPreferencesKey("browser_home_url")
     }
@@ -47,6 +51,7 @@ class SettingsRepository(private val context: Context) {
             sortAscending = this[Keys.SORT_ASC] ?: d.sortAscending,
             carControlsHideSeconds = this[Keys.CAR_HIDE_SECONDS] ?: d.carControlsHideSeconds,
             carFontScale = this[Keys.CAR_FONT_SCALE] ?: d.carFontScale,
+            carTheme = this[Keys.CAR_THEME]?.takeIf { it in CAR_THEME_KEYS } ?: d.carTheme,
             videoWhileDriving = this[Keys.CAR_DRIVE_VIDEO] ?: d.videoWhileDriving,
             browserHomeUrl = this[Keys.BROWSER_HOME] ?: d.browserHomeUrl,
         )
@@ -62,6 +67,9 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun setCarFontScale(scale: Float) {
         context.settingsStore.edit { it[Keys.CAR_FONT_SCALE] = scale.coerceIn(0.8f, 1.6f) }
+    }
+    suspend fun setCarTheme(theme: String) {
+        if (theme in CAR_THEME_KEYS) context.settingsStore.edit { it[Keys.CAR_THEME] = theme }
     }
     suspend fun setVideoWhileDriving(enabled: Boolean) {
         context.settingsStore.edit { it[Keys.CAR_DRIVE_VIDEO] = enabled }

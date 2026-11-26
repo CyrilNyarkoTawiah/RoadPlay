@@ -17,6 +17,7 @@ data class AppSettings(
     // Android Auto car screen
     val carControlsHideSeconds: Int = 2,
     val carFontScale: Float = 1f,
+    val carTheme: String = "navy",
     val videoWhileDriving: Boolean = true,
     val browserHomeUrl: String = "https://m.youtube.com",
 )
