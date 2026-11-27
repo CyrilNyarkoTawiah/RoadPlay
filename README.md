@@ -18,23 +18,23 @@ experience — including a browser with YouTube — at your fingertips on the da
 
 ## On the car screen (Android Auto)
 
-- **Full video library on the head unit** — All Videos, Favourites, Playlists, Recently
+- **Full video library on the head unit**: All Videos, Favourites, Playlists, Recently
   played, and folder browsing, with a **grid/list toggle** (3 thumbnails per row in grid
   mode) and real video thumbnails everywhere.
 - **Continue Watching** hero card on Home with resume.
 - **Parked-video playback** on the car display: fullscreen with tap-to-reveal controls that
-  auto-hide (1–10 s, configurable), ±10 s skip, seek, previous/next, and **VLC-style aspect
+  auto-hide (1–5 s, configurable), ±10 s skip, seek, previous/next, and **VLC-style aspect
   ratio modes** (Best fit, Stretch, 16:9, 4:3, 2.35:1, 1:1).
-- **Gear-change-proof** — shifting from drive to reverse (or back) doesn't dump you out of
+- **Gear-change-proof**: shifting from drive to reverse (or back) doesn't dump you out of
   your movie or pause it; the screen restores exactly where you were.
-- **Mini-player while browsing** — the film keeps playing in a slim bottom bar while you pick
+- **Mini-player while browsing**: the film keeps playing in a slim bottom bar while you pick
   the next one. Connecting to the car never auto-plays; you choose what starts.
-- **Built-in car browser** — URL bar, embedded YouTube with working fullscreen video, back
+- **Built-in car browser**: URL bar, embedded YouTube with working fullscreen video, back
   navigation, and an on-screen keyboard that types into the page's focused field (the AA host
   never shows the system keyboard; your phone keyboard works too).
-- **Five themes** — Navy, Carbon, Slate, Emerald, Wine — picked from the phone app, applied
+- **Five themes**: Navy, Carbon, Slate, Emerald, Wine — picked from the phone app, applied
   across the whole car UI (background, sidebar, cards, hero).
-- **Keep video while driving** switch, and a "Built by C.N.T" watermark.
+- **Keep video while driving** switch.
 
 ## On the phone
 
@@ -44,20 +44,6 @@ experience — including a browser with YouTube — at your fingertips on the da
   .srt/.vtt/.ass/.ttml), sleep timer, resume, volume/brightness gestures, error recovery.
 - Companion settings: car screen text size, car screen theme, control hide timer, browser
   home page, drive-safety switch.
-
-## Installation (video on AA)
-
-The head-unit video UI checks **which app installed the player**. For video to register:
-
-1. Start **Shizuku** (wireless debugging), then install the signed release APK with
-   **KingInstaller** (Shizuku switch ON) so the installer record reads `com.android.vending`.
-2. Force-stop the Android Auto host (`am force-stop com.google.android.projection.gearhead`)
-   so AA rescans its launcher.
-3. Plug in, open Android Auto → Customize launcher → **RoadPlay Video**.
-
-Every update installed the same way (over the top) keeps the record — no uninstall needed.
-Without the correct installer record the app still works as a normal media app (audio-only
-in the car), but no video UI appears.
 
 ## Folder structure
 
